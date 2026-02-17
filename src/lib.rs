@@ -18,8 +18,6 @@ pub mod prelude {
     pub use ratatui::style::*;
 }
 
-pub use mx_core as mx;
-
 // TODO: lock behind crossterm feature
 #[macro_export]
 macro_rules! key {
