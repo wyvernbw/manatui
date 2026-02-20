@@ -166,13 +166,6 @@ where
             set_style: set_style_system::<M, W>,
             get_style: get_style_system::<M, W>,
         });
-        debug_assert!(builder.has::<TuiElMarker>(), "bug in add_bundle");
-        debug_assert!(builder.has::<Props>(), "bug in add_bundle");
-        println!(
-            "(1) type id of {} = {:?}",
-            std::any::type_name::<TuiElMarker>(),
-            TypeId::of::<TuiElMarker>()
-        );
         builder
     }
 }
@@ -186,10 +179,6 @@ pub fn __ui_internal(
     #[builder(setters(vis = "", name = children_flag))] _children: Option<()>,
     #[builder(setters(vis = "", name = child_flag))] _child: Option<()>,
 ) -> EntityBuilder {
-    debug_assert!(
-        view.has::<TuiElMarker>(),
-        "called `done` on unmarked component."
-    );
     view
 }
 
@@ -211,7 +200,6 @@ where
         mut self,
         children: impl IntoUiBuilderList<M>,
     ) -> UiBuilder<impl ui_builder::State> {
-        debug_assert!(self.view.has::<TuiElMarker>());
         let children = children.into_list().collect::<Box<[_]>>();
         self.view.add(ChildrenBuilders(children));
         self.children_flag(())
@@ -263,7 +251,6 @@ where
         mut self,
         bundle: impl DynamicBundle,
     ) -> UiBuilder<impl ui_builder::State<Children = S::Children, Child = S::Child>> {
-        debug_assert!(self.view.has::<TuiElMarker>());
         self.view.add_bundle(bundle);
         self
     }
@@ -536,8 +523,6 @@ impl ElementCtx {
     /// also see [`ui`], [`Element`]
     pub fn spawn_ui(&mut self, ui: impl Into<EntityBuilder>) -> Element {
         let mut ui = ui.into();
-        debug_assert!(ui.has::<TuiElMarker>());
-        debug_assert!(ui.has::<Props>());
         let ui = ui.build();
         let root = self.spawn(ui);
         process_ui_system(self);
@@ -545,11 +530,11 @@ impl ElementCtx {
             self.query_one_mut::<(
                 &TuiElMarker,
                 &Props,
-                // &Width,
-                // &Height,
-                // &Padding,
-                // &Children,
-                // &Direction,
+                &Width,
+                &Height,
+                &Padding,
+                &Children,
+                &Direction,
             )>(root)
                 .is_ok(),
             "expecting default components on root"
