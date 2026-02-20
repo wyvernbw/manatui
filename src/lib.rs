@@ -2,7 +2,8 @@
 //!
 #![doc = include_str!("../readme.md")]
 
-pub use mana_tui_beheaded;
+extern crate self as mana_tui;
+
 pub use mana_tui_elemental;
 pub use mana_tui_utils;
 
@@ -17,6 +18,8 @@ pub mod prelude {
     pub use ratatui::style::palette;
     pub use ratatui::style::*;
 }
+
+mod tests;
 
 // TODO: lock behind crossterm feature
 #[macro_export]

@@ -174,6 +174,21 @@ impl ElementCtx {
         is_root: bool,
         area: Rect,
     ) -> Result<(), ComponentError> {
+        if is_root {
+            let mut query = self
+                .world
+                .query_one::<(&mut Props, &Width, &Height)>(element);
+            let (props, width, height) = query.get().unwrap();
+            // if the root element is set to grow, we want it to take up the entire
+            // screen.
+            if width.is_grow() {
+                props.size.x = area.width;
+            }
+            if height.is_grow() {
+                props.size.y = area.height;
+            }
+        }
+
         let mut query = self
             .world
             .query_one::<(&mut Props, &Padding, &Children, &Direction, &Gap)>(element);
@@ -190,21 +205,6 @@ impl ElementCtx {
         remaining_size.main_axis = remaining_size
             .main_axis
             .saturating_sub(children.len().saturating_sub(1) as u16 * *gap);
-
-        if is_root {
-            let mut query = self
-                .world
-                .query_one::<(&mut Props, &Width, &Height)>(element);
-            let (props, width, height) = query.get().unwrap();
-            // if the root element is set to grow, we want it to take up the entire
-            // screen.
-            if width.is_grow() {
-                props.size.x = area.width;
-            }
-            if height.is_grow() {
-                props.size.y = area.height;
-            }
-        }
 
         // cross axis
         children

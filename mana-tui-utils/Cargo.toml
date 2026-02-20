@@ -9,7 +9,7 @@ bon = { workspace = true, features = ["experimental-overwritable"] }
 derive_more.workspace = true
 tracing.workspace = true
 hecs.workspace = true
-glam = "0.30.10"
+glam = "0.32.0"
 smallvec = "1.15.1"
 im = "15.1.0"
 
