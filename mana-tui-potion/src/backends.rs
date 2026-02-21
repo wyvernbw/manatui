@@ -40,7 +40,8 @@ impl<Msg, W: std::io::Write> MsgStream<Msg, W> {
                     if let Ok(event) = event { return RuntimeMsg::Term(event) }
                 }
                 msg = this.dispatch.1.recv_async() => {
-                    if let Ok(msg) = msg { return RuntimeMsg::App(msg) }
+                    let more_queued = !this.dispatch.1.is_empty();
+                    if let Ok(msg) = msg { return RuntimeMsg::App(msg, more_queued) }
                 }
             }
         }

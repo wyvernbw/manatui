@@ -57,7 +57,7 @@ impl<Msg: Send + Sync + 'static> Effect<Msg> {
 }
 
 enum RuntimeMsg<Msg> {
-    App(Msg),
+    App(Msg, bool),
     Term(<DefaultBackend<std::io::Stdout> as ManaBackend>::Event),
 }
 
@@ -93,8 +93,8 @@ async fn runtime<Msg: Message, W: std::io::Write>(
 ) -> Result<(), RuntimeErr> {
     let msg = MsgStream::<Msg, W>::next(&mut msg_stream).await;
     match msg {
-        RuntimeMsg::App(msg) if quit_signal(&model, &msg) => Ok(()),
-        RuntimeMsg::App(msg) => {
+        RuntimeMsg::App(msg, _) if quit_signal(&model, &msg) => Ok(()),
+        RuntimeMsg::App(msg, false) => {
             let (model, mut effect) = update(model, msg).await;
             tokio::spawn(effect.0.run_effect(msg_stream.dispatch.0.clone()));
             let root = view(&model).await;
@@ -112,6 +112,11 @@ async fn runtime<Msg: Message, W: std::io::Write>(
                 ctx,
                 Some(root),
             )
+        }
+        RuntimeMsg::App(msg, true) => {
+            let (model, mut effect) = update(model, msg).await;
+            tokio::spawn(effect.0.run_effect(msg_stream.dispatch.0.clone()));
+            runtime(model, view, update, quit_signal, msg_stream, ctx, prev_root)
         }
         RuntimeMsg::Term(event) => {
             let result = focus::propagate_event::<Msg>(&ctx.el_ctx, &model, &event)
