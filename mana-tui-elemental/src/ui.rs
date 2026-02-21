@@ -18,7 +18,12 @@
 //!
 //! ```
 
-use std::{any::TypeId, borrow::Cow, collections::VecDeque, sync::Arc};
+use std::{
+    any::TypeId,
+    borrow::Cow,
+    collections::VecDeque,
+    sync::{Arc, Mutex},
+};
 
 use glam::U16Vec2;
 use hecs::{CommandBuffer, DynamicBundle, Entity, EntityBuilder, Or, Query, World};
@@ -137,10 +142,20 @@ where
             area: Rect,
             buf: &mut Buffer,
         ) {
-            let mut query = ctx.world.query_one::<(&W, Option<&mut W::State>)>(entity);
+            let mut query = ctx
+                .world
+                .query_one::<(&W, Option<Or<&mut W::State, &Arc<Mutex<W::State>>>>)>(entity);
             match query.get() {
                 Ok((widget, Some(state))) => {
-                    widget.render_element(area, buf, state);
+                    match state {
+                        Or::Left(state) | Or::Both(state, _) => {
+                            widget.render_element(area, buf, state);
+                        }
+                        Or::Right(state) => {
+                            let mut state = state.lock().expect("failed to lock state");
+                            widget.render_element(area, buf, &mut state);
+                        }
+                    };
                 }
                 Ok((widget, None)) => {
                     widget.render_element(area, buf, &mut W::State::default());
