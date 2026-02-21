@@ -57,23 +57,30 @@ where
     }
 }
 
-impl<W: 'static> ElWidget<StatefulWidgetMarker> for W
+/// # `Stateful` wrapper
+///
+/// makes the widget render with its [`StatefulWidget`] implementation. the state
+/// should be added as a component.
+#[derive(Debug)]
+pub struct Stateful<W>(W);
+
+impl<W> ElWidget<StatefulWidgetMarker> for Stateful<W>
 where
     W: StatefulWidget + Styled<Item = W> + Clone + std::fmt::Debug + Component,
-    <W as StatefulWidget>::State: Default + Component + Clone,
+    W::State: Default + Component + Clone,
 {
     type State = <W as StatefulWidget>::State;
 
     fn render_element(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        self.clone().render(area, buf, state);
+        self.0.clone().render(area, buf, state);
     }
 
     fn set_style(&mut self, style: Style) {
-        *self = Styled::set_style(self.clone(), style);
+        self.0 = Styled::set_style(self.0.clone(), style);
     }
 
     fn get_style(&self) -> Style {
-        self.style()
+        self.0.style()
     }
 }
 
