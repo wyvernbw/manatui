@@ -79,6 +79,8 @@ impl<Msg: Message> OnClick<Msg> {
 #[derive(Clone)]
 pub struct OnClickOrKey<Msg: Message>(DefaultKeyEvent, Callback<Msg, Msg::Model>);
 
+pub struct ClickOnEnter;
+
 unsafe impl<Msg: Message> Send for OnClickOrKey<Msg> {}
 unsafe impl<Msg: Message> Sync for OnClickOrKey<Msg> {}
 

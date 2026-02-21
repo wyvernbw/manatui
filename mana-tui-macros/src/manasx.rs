@@ -3,7 +3,7 @@ use std::fmt::Display;
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, quote_spanned};
 use syn::{
-    Token, parenthesized,
+    ParenthesizedGenericArguments, Token, parenthesized,
     parse::{Parse, discouraged::Speculative},
     spanned::Spanned,
 };
@@ -109,9 +109,13 @@ impl_parse_enum!(ManaName {
 #[derive(Debug, Clone)]
 struct ManaTagData {
     ident: ManaName,
+    generics: Option<TagGenerics>,
     attrs: ManaAttrVec,
     components: ComponentVec,
 }
+
+#[derive(Debug, Clone)]
+struct TagGenerics(ParenthesizedGenericArguments);
 
 impl ManaTagData {
     pub fn name(&self) -> syn::Result<String> {
@@ -409,13 +413,21 @@ fn parse_any<T: Parse>(input: syn::parse::ParseStream) -> impl Iterator<Item = T
 impl Parse for ManaTagData {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let ident = input.parse()?;
+        let generics: Option<TagGenerics> = input.parse().ok();
         let attrs = input.parse()?;
         let components = input.parse()?;
         Ok(ManaTagData {
             ident,
+            generics,
             attrs,
             components,
         })
+    }
+}
+
+impl Parse for TagGenerics {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        input.parse().map(Self)
     }
 }
 
@@ -519,11 +531,12 @@ impl quote::ToTokens for ManaTagData {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let ManaTagData {
             ident,
+            generics,
             attrs,
             components,
         } = self;
         let out = quote! {
-            __ui_internal(#ident::default() #attrs .into_view())#components
+            __ui_internal(#ident::<#generics>::default() #attrs .into_view())#components
         };
         tokens.extend(out);
     }
@@ -565,6 +578,12 @@ impl quote::ToTokens for ComponentVec {
             })
             .reduce(|acc, el| quote! {#acc #el});
         tokens.extend(result);
+    }
+}
+
+impl quote::ToTokens for TagGenerics {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        self.0.inputs.to_tokens(tokens);
     }
 }
 
@@ -637,11 +656,12 @@ impl quote::ToTokens for TextElement {
         };
         let ManaTagData {
             ref ident,
+            ref generics,
             ref attrs,
             ref components,
         } = open.data;
         let out = quote! {
-            __ui_internal(#ident::#constructor(format!(#text)) #attrs .into_view())#components
+            __ui_internal(#ident::<#generics>::#constructor(format!(#text)) #attrs .into_view())#components
         };
         tokens.extend(out);
     }

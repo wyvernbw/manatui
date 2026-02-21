@@ -58,7 +58,7 @@ impl<Msg: Send + Sync + 'static> Effect<Msg> {
 
 enum RuntimeMsg<Msg> {
     App(Msg),
-    Term(DefaultEvent),
+    Term(<DefaultBackend<std::io::Stdout> as ManaBackend>::Event),
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -67,6 +67,8 @@ pub enum RuntimeErr {
     ChannelClosed,
     #[error("error propagating event")]
     PropagateEventError,
+    #[error("error running navigation")]
+    NaviagtionError(#[from] anyhow::Error),
     #[error("error initializing runtine")]
     InitErr,
 }
@@ -80,16 +82,16 @@ pub struct Ctx<B: Backend> {
 }
 
 #[tailcall]
-async fn runtime<Msg: Message, B: 'static + ManaBackend>(
+async fn runtime<Msg: Message, W: std::io::Write>(
     model: Msg::Model,
     view: impl ViewFn<Msg, Msg::Model>,
     update: impl UpdateFn<Msg, Msg::Model>,
     quit_signal: impl SignalFn<Msg, Msg::Model>,
-    mut msg_stream: MsgStream<Msg>,
-    ctx: &mut Ctx<B>,
+    mut msg_stream: MsgStream<Msg, W>,
+    ctx: &mut Ctx<DefaultBackend<W>>,
     prev_root: Option<Element>,
 ) -> Result<(), RuntimeErr> {
-    let msg = MsgStream::<Msg>::next(&mut msg_stream).await;
+    let msg = MsgStream::<Msg, W>::next(&mut msg_stream).await;
     match msg {
         RuntimeMsg::App(msg) if quit_signal(&model, &msg) => Ok(()),
         RuntimeMsg::App(msg) => {
@@ -99,7 +101,7 @@ async fn runtime<Msg: Message, B: 'static + ManaBackend>(
             if let Some(prev) = prev_root {
                 ctx.despawn_ui(prev);
             }
-            let root = render::<Msg, B>(ctx, root);
+            let root = render::<Msg, W>(ctx, root);
 
             runtime(
                 model,
@@ -122,14 +124,29 @@ async fn runtime<Msg: Message, B: 'static + ManaBackend>(
                     .send_async(msg)
                     .await
                     .map_err(|_| RuntimeErr::ChannelClosed)?;
+            } else {
+                _ = focus::navigation_system::<DefaultBackend<W>>(&mut ctx.el_ctx, &event);
+                _ = focus::set_focus_style(&mut ctx.el_ctx);
+                render::<Msg, W>(ctx, view(&model).await);
             }
+
             runtime(model, view, update, quit_signal, msg_stream, ctx, prev_root)
         }
     }
 }
 
-fn render<Msg: Message, B: Backend>(ctx: &mut Ctx<B>, view: View) -> Element {
+fn render<Msg: Message, W: std::io::Write>(
+    ctx: &mut Ctx<DefaultBackend<W>>,
+    view: View,
+) -> Element {
     let root = ctx.spawn_ui(view);
+    draw::<Msg, W>(ctx, root)
+}
+
+fn draw<Msg: Message, W: std::io::Write>(
+    ctx: &mut Ctx<DefaultBackend<W>>,
+    root: Element,
+) -> Element {
     let result = ctx.terminal.draw(|frame| {
         let result = ctx.el_ctx.calculate_layout(root, frame.area());
         focus::generate_ui_stack(&mut ctx.el_ctx, root);
@@ -189,7 +206,7 @@ where
     let (model, mut effect) = init().await;
     tokio::spawn(effect.0.run_effect(dispatch.0.clone()));
     let tree = view(&model).await;
-    let root = render::<Msg, DefaultBackend<W>>(&mut ctx, tree);
+    let root = render::<Msg, W>(&mut ctx, tree);
 
     let result = runtime(
         model,

@@ -458,7 +458,16 @@ fn process_ui_system(world: &mut ElementCtx) {
         }
         let new_size = match text_query {
             TextQuery::Text(text) => Some((text.width(), text.height())),
-            TextQuery::Paragraph(_) => None,
+            TextQuery::Paragraph(p) => {
+                let width = width
+                    .and_then(|w| match w.0 {
+                        Size::Fixed(value) => Some(value as usize),
+                        Size::Fit => None,
+                        Size::Grow => None,
+                    })
+                    .unwrap_or_else(|| p.line_width());
+                Some((width, p.line_count(width as u16)))
+            }
             TextQuery::Line(line) => Some((line.width(), 1)),
             TextQuery::Span(span) => Some((span.width(), 1)),
         };

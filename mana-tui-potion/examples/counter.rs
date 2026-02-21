@@ -2,14 +2,14 @@ use std::io::stdout;
 use std::time::Duration;
 
 use crossterm::event::{EnableMouseCapture, Event, KeyEvent, KeyModifiers};
-use mana_tui::key;
 use mana_tui_elemental::prelude::*;
 use mana_tui_elemental::ui::View;
-use mana_tui_macros::ui;
+use mana_tui_macros::{subview, ui};
 use mana_tui_potion::backends::{DefaultEvent, KeyEventExt};
-use mana_tui_potion::focus::handlers::{On, OnClickOrKey, OnKey};
+use mana_tui_potion::focus::handlers::{ClickOnEnter, On, OnClickOrKey};
 use mana_tui_potion::focus::{FocusStyle, FocusTarget};
 use mana_tui_potion::{Effect, Message, run};
+use mana_tui_utils::key;
 use ratatui::style::Style;
 
 #[tokio::main(flavor = "current_thread")]
@@ -57,6 +57,21 @@ async fn init() -> (Model, Effect<AppMsg>) {
     )
 }
 
+#[subview]
+fn my_button<Marker: 'static>(keybind: KeyEvent, msg: AppMsg, tooltip: &'static str) -> View {
+    ui! {
+        <Block
+            .rounded .title_bottom={tooltip}.title_alignment={ratatui::layout::HorizontalAlignment::Center}
+            FocusTarget::new::<Marker>()
+            FocusStyle(Style::new().green())
+            Width::fixed(5) Center
+            ClickOnEnter
+            OnClickOrKey::new(keybind, msg)
+        >
+        </Block>
+    }
+}
+
 async fn view(model: &Model) -> View {
     struct DecButton;
     struct IncButton;
@@ -68,19 +83,12 @@ async fn view(model: &Model) -> View {
             .rounded
             .title_top="Magical App"
             Center
+            Gap(1)
             Height::grow() Width::grow()
             On::new(handle_quit)
         >
             <Block Direction::Horizontal CrossJustify::Center Gap(2)>
-                <Block
-                    .rounded .title_bottom="j" .title_alignment={ratatui::layout::HorizontalAlignment::Center}
-                    FocusTarget::new::<DecButton>()
-                    FocusStyle(Style::new().green())
-                    Width::fixed(5) Center
-                    OnClickOrKey::new(KeyEvent::char('j'), AppMsg::Dec)
-                >
-                    "-"
-                </Block>
+                <MyButton(DecButton) .keybind={KeyEvent::char('j')} .tooltip="j" .msg={AppMsg::Dec}>"-"</MyButton>
                 <Block Width::fixed(20) Height::fixed(1) Center>
                 {
                     if model.awake {
@@ -90,15 +98,11 @@ async fn view(model: &Model) -> View {
                     }
                 }
                 </Block>
-                <Block
-                    .rounded .title_bottom="k" .title_alignment={ratatui::layout::HorizontalAlignment::Center}
-                    FocusTarget::new::<IncButton>()
-                    FocusStyle(Style::new().green())
-                    Width::fixed(5) Center OnClickOrKey::new(KeyEvent::char('k'), AppMsg::Inc)
-                >
-                    "+"
-                </Block>
+                <MyButton(IncButton) .keybind={KeyEvent::char('k')} .tooltip="k" .msg={AppMsg::Inc}>"+"</MyButton>
             </Block>
+            <Paragraph .wrap={Wrap::default()} Width::fixed(40)>
+                "Tip: you can click the buttons with the mouse, or switch focus between them with the arrow keys or H and L and press Enter."
+            </Paragraph>
         </Block>
     }
 }

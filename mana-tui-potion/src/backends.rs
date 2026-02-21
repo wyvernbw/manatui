@@ -1,9 +1,10 @@
+use glam::{I16Vec2, U16Vec2};
 use ratatui::prelude::Backend;
 
 use crate::{Chan, RuntimeMsg};
 
 pub trait ManaBackend: Backend {
-    type Events: EventStream;
+    type Events: EventStream<Self::Event>;
     type KeyEvent;
     type Event;
 
@@ -13,22 +14,25 @@ pub trait ManaBackend: Backend {
     fn default_cycle_event() -> Self::Event;
 
     fn event_as_key(ev: Self::Event) -> Option<Self::KeyEvent>;
+
+    fn event_as_direction(ev: &Self::Event) -> Option<I16Vec2>;
+
+    fn event_is_confirm(ev: &Self::Event) -> bool;
 }
 
-pub trait EventStream {
-    type Out;
+pub trait EventStream<Out> {
     type Err;
 
     #[allow(async_fn_in_trait)]
-    async fn read(&mut self) -> Result<Self::Out, Self::Err>;
+    async fn read(&mut self) -> Result<Out, Self::Err>;
 }
 
-pub(crate) struct MsgStream<Msg> {
-    pub(crate) event_stream: <DefaultBackend<std::io::Stdout> as ManaBackend>::Events,
+pub(crate) struct MsgStream<Msg, W: std::io::Write> {
+    pub(crate) event_stream: <DefaultBackend<W> as ManaBackend>::Events,
     pub(crate) dispatch: Chan<Msg>,
 }
 
-impl<Msg> MsgStream<Msg> {
+impl<Msg, W: std::io::Write> MsgStream<Msg, W> {
     pub(crate) async fn next(this: &mut Self) -> RuntimeMsg<Msg> {
         loop {
             tokio::select! {
@@ -46,6 +50,8 @@ impl<Msg> MsgStream<Msg> {
 #[cfg(feature = "crossterm")]
 pub(crate) mod crossterm_backend {
     use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
+    use glam::{I16Vec2, U16Vec2};
+    use mana_tui_utils::key;
     use ratatui::prelude::CrosstermBackend;
     use tokio_stream::StreamExt;
 
@@ -60,7 +66,7 @@ pub(crate) mod crossterm_backend {
             crossterm::event::EventStream::new()
         }
 
-        fn default_cycle_event() -> <Self::Events as EventStream>::Out {
+        fn default_cycle_event() -> Self::Event {
             Event::Key(crossterm::event::KeyEvent {
                 code: KeyCode::Tab,
                 modifiers: KeyModifiers::empty(),
@@ -72,13 +78,26 @@ pub(crate) mod crossterm_backend {
         fn event_as_key(ev: Self::Event) -> Option<Self::KeyEvent> {
             ev.as_key_event()
         }
+
+        fn event_as_direction(ev: &Self::Event) -> Option<I16Vec2> {
+            match ev.as_key_event() {
+                Some(key!(Char('h'), Press) | key!(Left, Press)) => Some(I16Vec2::new(-1, 0)),
+                Some(key!(Char('j'), Press) | key!(Down, Press)) => Some(I16Vec2::new(0, 1)),
+                Some(key!(Char('k'), Press) | key!(Up, Press)) => Some(I16Vec2::new(0, -1)),
+                Some(key!(Char('l'), Press) | key!(Right, Press)) => Some(I16Vec2::new(1, 0)),
+                _ => None,
+            }
+        }
+
+        fn event_is_confirm(ev: &Self::Event) -> bool {
+            matches!(ev.as_key_event(), Some(key!(Enter, Press)))
+        }
     }
 
-    impl EventStream for crossterm::event::EventStream {
-        type Out = crossterm::event::Event;
+    impl EventStream<crossterm::event::Event> for crossterm::event::EventStream {
         type Err = std::io::Error;
 
-        async fn read(&mut self) -> Result<Self::Out, Self::Err> {
+        async fn read(&mut self) -> Result<crossterm::event::Event, Self::Err> {
             loop {
                 let res = self.next().await;
                 if let Some(event) = res {
@@ -89,8 +108,7 @@ pub(crate) mod crossterm_backend {
     }
 
     pub type DefaultBackend<W> = CrosstermBackend<W>;
-    pub type DefaultEvent =
-        <<DefaultBackend<std::io::Stdout> as ManaBackend>::Events as EventStream>::Out;
+    pub type DefaultEvent = <DefaultBackend<std::io::Stdout> as ManaBackend>::Event;
     pub type DefaultKeyEvent = <DefaultBackend<std::io::Stdout> as ManaBackend>::KeyEvent;
 
     pub trait KeyEventExt {
