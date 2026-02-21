@@ -61,7 +61,7 @@ where
 ///
 /// makes the widget render with its [`StatefulWidget`] implementation. the state
 /// should be added as a component.
-#[derive(Debug)]
+#[derive(Debug, Clone, Default, derive_more::Deref, derive_more::DerefMut)]
 pub struct Stateful<W>(W);
 
 impl<W> ElWidget<StatefulWidgetMarker> for Stateful<W>
