@@ -26,15 +26,15 @@ pub trait SignalFn<Msg, Model> = Fn(&Model, &Msg) -> bool;
 type PinnedFuture<R> = SmallBox<dyn Future<Output = R> + Send + Sync + 'static, [usize; 4]>;
 
 pub trait EffectFn<Msg>: Send + Sync + 'static {
-    fn run_effect(&self, tx: Sender<Msg>) -> PinnedFuture<()>;
+    fn run_effect(&mut self, tx: Sender<Msg>) -> PinnedFuture<()>;
 }
 
 impl<F, Fut, Msg> EffectFn<Msg> for F
 where
-    F: Fn(Sender<Msg>) -> Fut + Send + Sync + 'static,
+    F: FnMut(Sender<Msg>) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = ()> + Send + Sync + 'static,
 {
-    fn run_effect(&self, tx: Sender<Msg>) -> PinnedFuture<()> {
+    fn run_effect(&mut self, tx: Sender<Msg>) -> PinnedFuture<()> {
         let future = (self)(tx);
         SmallBox::<Fut, [usize; 4]>::new(future as _)
     }
@@ -93,7 +93,7 @@ async fn runtime<Msg: Message, B: 'static + ManaBackend>(
     match msg {
         RuntimeMsg::App(msg) if quit_signal(&model, &msg) => Ok(()),
         RuntimeMsg::App(msg) => {
-            let (model, effect) = update(model, msg).await;
+            let (model, mut effect) = update(model, msg).await;
             tokio::spawn(effect.0.run_effect(msg_stream.dispatch.0.clone()));
             let root = view(&model).await;
             if let Some(prev) = prev_root {
@@ -114,7 +114,7 @@ async fn runtime<Msg: Message, B: 'static + ManaBackend>(
         RuntimeMsg::Term(event) => {
             let result = focus::propagate_event::<Msg>(&ctx.el_ctx, &model, &event)
                 .map_err(|_| RuntimeErr::PropagateEventError)?;
-            if let Some((msg, effect)) = result {
+            if let Some((msg, mut effect)) = result {
                 tokio::spawn(effect.0.run_effect(msg_stream.dispatch.0.clone()));
                 msg_stream
                     .dispatch
@@ -186,7 +186,7 @@ where
         terminal,
     };
 
-    let (model, effect) = init().await;
+    let (model, mut effect) = init().await;
     tokio::spawn(effect.0.run_effect(dispatch.0.clone()));
     let tree = view(&model).await;
     let root = render::<Msg, DefaultBackend<W>>(&mut ctx, tree);
