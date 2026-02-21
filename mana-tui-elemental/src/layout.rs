@@ -23,8 +23,10 @@ pub use tui_scrollview::{ScrollView, ScrollViewState};
 /// trait for rendering elements through a shared reference. this is automatically implemented
 /// for anything that implements [`Widget`], [`Clone`] and [`Component`]
 pub trait ElWidget<M>: std::fmt::Debug + Component {
+    /// the state type
+    type State: ?Sized + Default + Component + Clone;
     /// render the element through the shared reference. clones internally
-    fn render_element(&self, area: Rect, buf: &mut Buffer);
+    fn render_element(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State);
     /// sets the style of a widget
     fn set_style(&mut self, style: Style);
     /// gets the style of a widget
@@ -33,13 +35,37 @@ pub trait ElWidget<M>: std::fmt::Debug + Component {
 
 /// marker for [`ElWidget`] trait.
 pub struct WidgetMarker;
+/// marker for [`ElWidget`] trait.
+pub struct StatefulWidgetMarker;
 
 impl<W: 'static> ElWidget<WidgetMarker> for W
 where
     W: Widget + Styled<Item = W> + Clone + std::fmt::Debug + Component,
 {
-    fn render_element(&self, area: Rect, buf: &mut Buffer) {
+    type State = ();
+
+    fn render_element(&self, area: Rect, buf: &mut Buffer, _: &mut Self::State) {
         self.clone().render(area, buf);
+    }
+
+    fn set_style(&mut self, style: Style) {
+        *self = Styled::set_style(self.clone(), style);
+    }
+
+    fn get_style(&self) -> Style {
+        self.style()
+    }
+}
+
+impl<W: 'static> ElWidget<StatefulWidgetMarker> for W
+where
+    W: StatefulWidget + Styled<Item = W> + Clone + std::fmt::Debug + Component,
+    <W as StatefulWidget>::State: Default + Component + Clone,
+{
+    type State = <W as StatefulWidget>::State;
+
+    fn render_element(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        self.clone().render(area, buf, state);
     }
 
     fn set_style(&mut self, style: Style) {
