@@ -84,6 +84,16 @@ where
     }
 }
 
+/// extension trait for wrapping widgets in the [`Stateful`] wrapper.
+pub trait IntoStateful: StatefulWidget + Sized {
+    /// turns a type that implements [`StatefulWidget`] into a [`Stateful`]
+    fn stateful(self) -> Stateful<Self> {
+        Stateful(self)
+    }
+}
+
+impl<W> IntoStateful for W where W: StatefulWidget + Sized {}
+
 /// Context struct that drives the layout engine.
 ///
 /// # Usage
