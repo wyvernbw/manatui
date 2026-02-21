@@ -535,8 +535,13 @@ impl quote::ToTokens for ManaTagData {
             attrs,
             components,
         } = self;
-        let out = quote! {
-            __ui_internal(#ident::<#generics>::default() #attrs .into_view())#components
+        let out = match generics {
+            Some(generics) => quote! {
+                __ui_internal(#ident::<#generics>::default() #attrs .into_view())#components
+            },
+            None => quote! {
+                __ui_internal(#ident::default() #attrs .into_view())#components
+            },
         };
         tokens.extend(out);
     }
