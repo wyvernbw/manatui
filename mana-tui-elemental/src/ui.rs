@@ -137,10 +137,15 @@ where
             area: Rect,
             buf: &mut Buffer,
         ) {
-            let mut query = ctx.world.query_one::<(&W, Option<&W::State>)>(entity);
-            if let Ok((widget, state)) = query.get() {
-                let mut state = state.cloned().unwrap_or_default();
-                widget.render_element(area, buf, &mut state);
+            let mut query = ctx.world.query_one::<(&W, Option<&mut W::State>)>(entity);
+            match query.get() {
+                Ok((widget, Some(state))) => {
+                    widget.render_element(area, buf, state);
+                }
+                Ok((widget, None)) => {
+                    widget.render_element(area, buf, &mut W::State::default());
+                }
+                _ => {}
             }
         }
         fn set_style_system<M, W: ElWidget<M>>(
