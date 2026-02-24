@@ -22,6 +22,24 @@ pub enum FocusPolicy {
     Block,
 }
 
+impl FocusPolicy {
+    /// Returns `true` if the focus policy is [`Pass`].
+    ///
+    /// [`Pass`]: FocusPolicy::Pass
+    #[must_use]
+    pub fn is_pass(&self) -> bool {
+        matches!(self, Self::Pass)
+    }
+
+    /// Returns `true` if the focus policy is [`Block`].
+    ///
+    /// [`Block`]: FocusPolicy::Block
+    #[must_use]
+    pub fn is_block(&self) -> bool {
+        matches!(self, Self::Block)
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub enum Navigation {
     Cycle(DefaultEvent),
@@ -142,21 +160,25 @@ pub(crate) fn init_focus_system(world: &mut World) {
 }
 
 macro_rules! try_handler {
-    ($world:ident, $entity:ident, $on:ident, $model:ident, $msg:ident) => {
+    ($world:ident, $entity:ident, $on:ident, $model:ident, $msg:ident, $policy_blocks:expr) => {
         let value = $on($model, $msg);
         if let Some(value) = value {
             _ = try_grab_focus($world, $entity);
-            return Ok(Some(value));
+            if $policy_blocks {
+                return Ok(Some(value));
+            }
         }
     };
-    ($world:ident, $entity:ident, Key($key:ident), $on:ident, $model:ident, $msg:ident) => {
+    ($world:ident, $entity:ident, Key($key:ident), $on:ident, $model:ident, $msg:ident, $policy_blocks:expr) => {
         if let Some(key_event) = DefaultBackend::<std::io::Stdout>::event_as_key($msg.clone())
             && &key_event == $key
         {
             let value = $on($model, $msg);
             if let Some(value) = value {
                 _ = try_grab_focus($world, $entity);
-                return Ok(Some(value));
+                if $policy_blocks {
+                    return Ok(Some(value));
+                }
             }
         }
     };
@@ -178,30 +200,39 @@ pub(crate) fn propagate_key_event<Msg: Message>(
 
             drop(uistack);
 
-            let mut query = world.query::<(&OnClick<Msg>, &ClickOnEnter)>();
+            let mut query = world.query::<(&OnClick<Msg>, &ClickOnEnter, Option<&FocusPolicy>)>();
             let query = query.view();
-            if let Some((OnClick(on_click), _)) = query.get(focused_on) {
-                try_handler!(world, focused_on, on_click, model, msg);
+            if let Some((OnClick(on_click), _, focus_policy)) = query.get(focused_on) {
+                let focus_policy = focus_policy.unwrap_or(&FocusPolicy::Pass);
+                try_handler!(
+                    world,
+                    focused_on,
+                    on_click,
+                    model,
+                    msg,
+                    focus_policy.is_block()
+                );
             }
         }
     }
 
     let stack = world.get_resource::<&UiStack>()?;
-    let mut query = world.query::<Or<&On<Msg>, &OnKey<Msg>>>();
+    let mut query = world.query::<(Or<&On<Msg>, &OnKey<Msg>>, Option<&FocusPolicy>)>();
     let query = query.view();
     for group in &stack.stack {
         for entity in group.elements.iter().copied() {
-            if let Some(value) = query.get(entity) {
+            if let Some((value, policy)) = query.get(entity) {
+                let blocks = policy.unwrap_or(&FocusPolicy::Pass).is_block();
                 match value {
                     Or::Left(On(on)) => {
-                        try_handler!(world, entity, on, model, msg);
+                        try_handler!(world, entity, on, model, msg, blocks);
                     }
                     Or::Right(OnKey(key, cb)) => {
-                        try_handler!(world, entity, Key(key), cb, model, msg);
+                        try_handler!(world, entity, Key(key), cb, model, msg, blocks);
                     }
                     Or::Both(On(on), OnKey(key, on_key)) => {
-                        try_handler!(world, entity, Key(key), on_key, model, msg);
-                        try_handler!(world, entity, on, model, msg);
+                        try_handler!(world, entity, Key(key), on_key, model, msg, blocks);
+                        try_handler!(world, entity, on, model, msg, blocks);
                     }
                 }
             }
@@ -231,11 +262,12 @@ pub(crate) fn propagate_mouse_event<Msg: Message>(
         }
     }
     let stack = world.get_resource::<&UiStack>()?;
-    let mut query = world.query::<(&OnClick<Msg>, &Props)>();
+    let mut query = world.query::<(&OnClick<Msg>, &Props, Option<&FocusPolicy>)>();
     let query = query.view();
     for group in &stack.stack {
         for entity in group.elements.iter().copied() {
-            if let Some((OnClick(on_click), props)) = query.get(entity) {
+            if let Some((OnClick(on_click), props, focus_policy)) = query.get(entity) {
+                let blocks = focus_policy.unwrap_or(&FocusPolicy::Pass).is_block();
                 let area = Rect {
                     x: props.position.x,
                     y: props.position.y,
@@ -246,7 +278,7 @@ pub(crate) fn propagate_mouse_event<Msg: Message>(
                     x: x_coord,
                     y: y_coord,
                 }) {
-                    try_handler!(world, entity, on_click, model, msg);
+                    try_handler!(world, entity, on_click, model, msg, blocks);
                 }
             }
         }
