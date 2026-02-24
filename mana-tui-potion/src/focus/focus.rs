@@ -160,16 +160,17 @@ pub(crate) fn init_focus_system(world: &mut World) {
 }
 
 macro_rules! try_handler {
-    ($world:ident, $entity:ident, $on:ident, $model:ident, $msg:ident, $policy_blocks:expr) => {
+    ($world:ident, $entity:ident, $on:ident, $model:ident, $msg:ident, $policy_blocks:expr, $accumulator:ident) => {
         let value = $on($model, $msg);
         if let Some(value) = value {
             _ = try_grab_focus($world, $entity);
             if $policy_blocks {
                 return Ok(Some(value));
             }
+            $accumulator = $accumulator.or(Some(value));
         }
     };
-    ($world:ident, $entity:ident, Key($key:ident), $on:ident, $model:ident, $msg:ident, $policy_blocks:expr) => {
+    ($world:ident, $entity:ident, Key($key:ident), $on:ident, $model:ident, $msg:ident, $policy_blocks:expr, $accumulator:ident) => {
         if let Some(key_event) = DefaultBackend::<std::io::Stdout>::event_as_key($msg.clone())
             && &key_event == $key
         {
@@ -179,6 +180,7 @@ macro_rules! try_handler {
                 if $policy_blocks {
                     return Ok(Some(value));
                 }
+                $accumulator = $accumulator.or(Some(value));
             }
         }
     };
@@ -189,6 +191,7 @@ pub(crate) fn propagate_key_event<Msg: Message>(
     model: &Msg::Model,
     msg: &DefaultEvent,
 ) -> Result<Option<(Msg, Effect<Msg>)>, anyhow::Error> {
+    let mut accumulator = None;
     if DefaultBackend::<std::io::Stdout>::event_is_confirm(msg) {
         let focus_ctx = world.get_resource::<&FocusContext>()?;
         if let Some(focused_on) = focus_ctx.top() {
@@ -210,7 +213,8 @@ pub(crate) fn propagate_key_event<Msg: Message>(
                     on_click,
                     model,
                     msg,
-                    focus_policy.is_block()
+                    focus_policy.is_block(),
+                    accumulator
                 );
             }
         }
@@ -225,20 +229,29 @@ pub(crate) fn propagate_key_event<Msg: Message>(
                 let blocks = policy.unwrap_or(&FocusPolicy::Pass).is_block();
                 match value {
                     Or::Left(On(on)) => {
-                        try_handler!(world, entity, on, model, msg, blocks);
+                        try_handler!(world, entity, on, model, msg, blocks, accumulator);
                     }
                     Or::Right(OnKey(key, cb)) => {
-                        try_handler!(world, entity, Key(key), cb, model, msg, blocks);
+                        try_handler!(world, entity, Key(key), cb, model, msg, blocks, accumulator);
                     }
                     Or::Both(On(on), OnKey(key, on_key)) => {
-                        try_handler!(world, entity, Key(key), on_key, model, msg, blocks);
-                        try_handler!(world, entity, on, model, msg, blocks);
+                        try_handler!(
+                            world,
+                            entity,
+                            Key(key),
+                            on_key,
+                            model,
+                            msg,
+                            blocks,
+                            accumulator
+                        );
+                        try_handler!(world, entity, on, model, msg, blocks, accumulator);
                     }
                 }
             }
         }
     }
-    Ok(None)
+    Ok(accumulator)
 }
 
 pub(crate) fn propagate_mouse_event<Msg: Message>(
@@ -261,6 +274,7 @@ pub(crate) fn propagate_mouse_event<Msg: Message>(
             return Ok(None);
         }
     }
+    let mut accumulator = None;
     let stack = world.get_resource::<&UiStack>()?;
     let mut query = world.query::<(&OnClick<Msg>, &Props, Option<&FocusPolicy>)>();
     let query = query.view();
@@ -278,12 +292,12 @@ pub(crate) fn propagate_mouse_event<Msg: Message>(
                     x: x_coord,
                     y: y_coord,
                 }) {
-                    try_handler!(world, entity, on_click, model, msg, blocks);
+                    try_handler!(world, entity, on_click, model, msg, blocks, accumulator);
                 }
             }
         }
     }
-    Ok(None)
+    Ok(accumulator)
 }
 
 pub(crate) fn propagate_event<Msg: Message>(
