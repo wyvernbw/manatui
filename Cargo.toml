@@ -11,9 +11,10 @@ nightly = ["mana-tui-elemental/nightly"]
 [dependencies]
 mana-tui-elemental.workspace = true
 mana-tui-utils.workspace = true
+mana-tui-potion.workspace = true
+mana-tui-macros = { workspace = true, optional = true }
 ratatui.workspace = true
 bon = { workspace = true, optional = true }
-mana-tui-macros = { workspace = true, optional = true }
 
 [dev-dependencies]
 bon.workspace = true
@@ -46,6 +47,7 @@ tracing-subscriber = "0.3.22"
 mana-tui-elemental = { path = "./mana-tui-elemental" }
 mana-tui-macros = { path = "./mana-tui-macros" }
 mana-tui-utils = { path = "./mana-tui-utils" }
+mana-tui-potion = { path = "./mana-tui-potion" }
 
 [workspace.lints.clippy]
 pedantic = "warn"

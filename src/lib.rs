@@ -5,6 +5,7 @@
 extern crate self as mana_tui;
 
 pub use mana_tui_elemental;
+pub use mana_tui_potion;
 pub use mana_tui_utils;
 
 pub mod prelude {

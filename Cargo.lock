@@ -782,6 +782,7 @@ dependencies = [
  "hecs",
  "mana-tui-elemental",
  "mana-tui-macros",
+ "mana-tui-potion",
  "mana-tui-utils",
  "ratatui",
  "tracing",
