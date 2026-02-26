@@ -81,17 +81,17 @@ pub(crate) mod crossterm_backend {
         }
 
         fn event_as_direction(ev: &Self::Event) -> Option<I16Vec2> {
-            match ev.as_key_event() {
-                Some(key!(Char('h'), Press) | key!(Left, Press)) => Some(I16Vec2::new(-1, 0)),
-                Some(key!(Char('j'), Press) | key!(Down, Press)) => Some(I16Vec2::new(0, 1)),
-                Some(key!(Char('k'), Press) | key!(Up, Press)) => Some(I16Vec2::new(0, -1)),
-                Some(key!(Char('l'), Press) | key!(Right, Press)) => Some(I16Vec2::new(1, 0)),
+            match ev {
+                key!(Char('h')) | key!(Left) => Some(I16Vec2::new(-1, 0)),
+                key!(Char('j')) | key!(Down) => Some(I16Vec2::new(0, 1)),
+                key!(Char('k')) | key!(Up) => Some(I16Vec2::new(0, -1)),
+                key!(Char('l')) | key!(Right) => Some(I16Vec2::new(1, 0)),
                 _ => None,
             }
         }
 
         fn event_is_confirm(ev: &Self::Event) -> bool {
-            matches!(ev.as_key_event(), Some(key!(Enter, Press)))
+            matches!(ev, key!(Enter))
         }
     }
 

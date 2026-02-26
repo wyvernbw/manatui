@@ -18,7 +18,6 @@ async fn main() {
         matches!(event, AppMsg::Quit)
     }
     run()
-        .writer(std::io::stdout())
         .init(init)
         .view(view)
         .update(update)
@@ -109,7 +108,7 @@ async fn view(model: &Model) -> View {
 
 fn handle_quit(_: &Model, event: &DefaultEvent) -> Option<(AppMsg, Effect<AppMsg>)> {
     match event {
-        Event::Key(key!(Char('q'), Press) | key!(Char('c'), Press, KeyModifiers::CONTROL)) => {
+        key!(Char('q')) | key!(Char('c'), KeyModifiers::CONTROL) => {
             Some((AppMsg::Quit, Effect::none()))
         }
         _ => None,

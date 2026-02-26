@@ -5,13 +5,16 @@ pub mod backends;
 #[path = "./focus/focus.rs"]
 pub mod focus;
 
+use std::io::stdout;
+
+use crossterm::terminal::enable_raw_mode;
 use flume::{Receiver, Sender};
 use hecs::Component;
 use mana_tui_elemental::{
     layout::{Element, ElementCtx},
     ui::View,
 };
-use ratatui::{Terminal, prelude::Backend};
+use ratatui::{Terminal, TerminalOptions, prelude::Backend};
 use smallbox::SmallBox;
 use tailcall::tailcall;
 
@@ -71,6 +74,8 @@ pub enum RuntimeErr {
     NaviagtionError(#[from] anyhow::Error),
     #[error("error initializing runtine")]
     InitErr,
+    #[error("error restoring terminal")]
+    CleanupError,
 }
 
 #[derive(derive_more::Deref, derive_more::DerefMut)]
@@ -183,37 +188,55 @@ fn draw<Msg: Message, W: std::io::Write>(
 /// - if there is an error initializing the runtime
 #[bon::builder]
 #[builder(finish_fn = run)]
-pub async fn run<W, Msg>(
-    writer: W,
+pub async fn run_in<W, Msg>(
+    #[builder(start_fn)] writer: W,
     init: impl InitFn<Msg, Msg::Model>,
     view: impl ViewFn<Msg, Msg::Model>,
     update: impl UpdateFn<Msg, Msg::Model>,
     quit_signal: impl SignalFn<Msg, Msg::Model>,
+    #[builder(default, name = "with_options")] options: TerminalOptions,
 ) -> Result<(), RuntimeErr>
 where
     Msg: Clone + Message + Component,
     W: std::io::Write + 'static,
 {
+    fn set_panic_hook() {
+        let hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            ratatui::restore();
+            hook(info);
+        }));
+    }
+
+    let is_inline = matches!(options.viewport, ratatui::Viewport::Inline(_));
     let dispatch = flume::unbounded::<Msg>();
     let mut backend = DefaultBackend::new(writer);
     let msg_stream = MsgStream {
         event_stream: backend.create_events().await,
         dispatch: dispatch.clone(),
     };
-    let terminal = ratatui::Terminal::new(backend).map_err(|_| RuntimeErr::InitErr)?;
+    let terminal =
+        ratatui::Terminal::with_options(backend, options).map_err(|_| RuntimeErr::InitErr)?;
 
-    ratatui::init();
+    set_panic_hook();
+    enable_raw_mode().map_err(|_| RuntimeErr::InitErr)?;
+
     let mut ctx = Ctx {
         el_ctx: mana_tui_elemental::prelude::ElementCtx::new(),
         terminal,
     };
+
+    let mut cursor_pos = ctx
+        .terminal
+        .get_cursor_position()
+        .map_err(|_| RuntimeErr::InitErr)?;
 
     let (model, mut effect) = init().await;
     tokio::spawn(effect.0.run_effect(dispatch.0.clone()));
     let tree = view(&model).await;
     let root = render::<Msg, W>(&mut ctx, tree);
 
-    let result = runtime(
+    runtime(
         model,
         view,
         update,
@@ -222,11 +245,64 @@ where
         &mut ctx,
         Some(root),
     )
-    .await;
+    .await?;
 
     ratatui::restore();
 
-    result
+    if is_inline {
+        let area = ctx.terminal.get_frame().area();
+        cursor_pos.y = cursor_pos.y.saturating_sub(area.height) + 1;
+        _ = ctx.terminal.set_cursor_position(cursor_pos);
+        ctx.terminal
+            .backend_mut()
+            .clear_region(ratatui::backend::ClearType::AfterCursor)
+            .map_err(|_| RuntimeErr::CleanupError)?;
+    }
+
+    Ok(())
+}
+
+/// # Errors
+///
+/// errors here should be treated as fatal. this function errros:
+///
+/// - if the app channel is closed somehow
+/// - if an error happens while propagating an event
+/// - if there is an error initializing the runtime
+#[bon::builder]
+#[builder(finish_fn = run)]
+pub async fn run<Msg>(
+    init: impl InitFn<Msg, Msg::Model>,
+    view: impl ViewFn<Msg, Msg::Model>,
+    update: impl UpdateFn<Msg, Msg::Model>,
+    quit_signal: impl SignalFn<Msg, Msg::Model>,
+    #[builder(default, name = "with_options")] options: TerminalOptions,
+) -> Result<(), RuntimeErr>
+where
+    Msg: Clone + Message + Component,
+{
+    let is_inline = matches!(options.viewport, ratatui::Viewport::Inline(_));
+
+    #[cfg(feature = "crossterm")]
+    if !is_inline {
+        _ = crossterm::execute!(stdout(), crossterm::terminal::EnterAlternateScreen);
+    }
+
+    run_in(stdout())
+        .with_options(options)
+        .init(init)
+        .view(view)
+        .update(update)
+        .quit_signal(quit_signal)
+        .run()
+        .await?;
+
+    #[cfg(feature = "crossterm")]
+    if !is_inline {
+        _ = crossterm::execute!(stdout(), crossterm::terminal::LeaveAlternateScreen);
+    }
+
+    Ok(())
 }
 
 pub trait Message: Clone + Component {

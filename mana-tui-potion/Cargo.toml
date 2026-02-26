@@ -6,6 +6,7 @@ edition = "2024"
 [features]
 default = ["crossterm"]
 crossterm = ["dep:crossterm"]
+scroll = ["ratatui/scrolling-regions"]
 
 [dependencies]
 mana-tui-elemental.workspace = true

@@ -504,6 +504,12 @@ impl ElementCtx {
     /// this will error if any element index is invalid. this can only happen if you manually despawn
     /// entities using [`hecs::World::despawn`] or other such methods.
     pub fn calculate_layout(&mut self, element: Element, area: Rect) -> Result<(), ComponentError> {
+        {
+            let origin = u16vec2(area.x, area.y);
+            let mut root_props = self.get::<&mut Props>(element)?;
+            root_props.position = origin;
+        }
+
         self.calculate_fit_sizes(element)?;
         self.calculate_grow_sizes(element, true, area)?;
         self.calculate_positions(element)?;
