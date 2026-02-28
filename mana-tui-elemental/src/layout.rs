@@ -151,8 +151,8 @@ impl ElementCtx {
         let mut props_query = self.world.query_one::<&mut Props>(element);
         let props = props_query.get().unwrap();
 
-        width.apply(&mut props.size.x, Some(parent_size.x));
-        height.apply(&mut props.size.y, Some(parent_size.y));
+        props.size.x = width.apply(props.size.x, Some(parent_size.x));
+        props.size.y = height.apply(props.size.y, Some(parent_size.y));
 
         let inner_size = props.inner_size_from_padding(padding);
         let mut space_used = AxisSizes::default();
@@ -246,11 +246,23 @@ impl ElementCtx {
             &Gap,
             &Width,
             &Height,
+            Option<&MaxWidth>,
+            Option<&MaxHeight>,
         )>(element);
-        let (props, &padding, children, &direction, &gap, &width, &height) = query.get().unwrap();
+        let (props, &padding, children, &direction, &gap, &width, &height, max_width, max_height) =
+            query.get().unwrap();
 
-        width.apply(&mut props.size.x, Some(parent_size.x));
-        height.apply(&mut props.size.y, Some(parent_size.y));
+        let max_width =
+            max_width.map(|max_width| max_width.apply(props.size.x, Some(parent_size.x)));
+        let max_height =
+            max_height.map(|max_height| max_height.apply(props.size.x, Some(parent_size.x)));
+        let max_size = u16vec2(
+            max_width.unwrap_or(u16::MAX),
+            max_height.unwrap_or(u16::MAX),
+        );
+        props.size.x = width.apply(props.size.x, Some(parent_size.x));
+        props.size.y = height.apply(props.size.y, Some(parent_size.y));
+        props.size = props.size.min(max_size);
 
         let children = children.clone();
         let inner_size = props.inner_size_from_padding(&padding);
@@ -269,14 +281,29 @@ impl ElementCtx {
         children
             .iter()
             .try_for_each(|child| -> Result<(), ComponentError> {
-                let mut child_query = self.world.query_one::<(&mut Props, &Width, &Height)>(child);
-                let (child_props, child_width, child_height) = child_query.get().unwrap();
+                let mut child_query = self.world.query_one::<(
+                    &mut Props,
+                    &Width,
+                    &Height,
+                    Option<&MaxWidth>,
+                    Option<&MaxHeight>,
+                )>(child);
+                let (child_props, child_width, child_height, max_width, max_height) =
+                    child_query.get().unwrap();
                 if !cross_size(direction, *child_width, *child_height).is_grow() {
                     return Ok(());
                 }
+                let max_width =
+                    max_width.map(|max_width| max_width.apply(props.size.x, Some(parent_size.x)));
+                let max_height = max_height
+                    .map(|max_height| max_height.apply(props.size.x, Some(parent_size.x)));
+                let max_size = u16vec2(
+                    max_width.unwrap_or(u16::MAX),
+                    max_height.unwrap_or(u16::MAX),
+                );
                 let mut size = AxisSizes::from_u16vec2(child_props.size, direction);
                 size.cross_axis = axify(inner_size, direction).cross_axis;
-                child_props.size = size.to_u16vec2(direction);
+                child_props.size = size.to_u16vec2(direction).min(max_size);
                 Ok(())
             })?;
 
@@ -286,12 +313,15 @@ impl ElementCtx {
             props: &'a mut Props,
             width: &'a Width,
             height: &'a Height,
+            max_width: Option<&'a MaxWidth>,
+            max_height: Option<&'a MaxHeight>,
         }
         #[derive(d::Debug)]
         struct GrowEntry {
             is_grow: bool,
             #[debug("({}, {})", self.size.main_axis, self.size.cross_axis)]
             size: AxisSizes,
+            max_size: AxisSizes,
             entity: Element,
         }
         let mut buffer = children
@@ -301,10 +331,22 @@ impl ElementCtx {
                 let grow_query = grow_query.get().unwrap();
                 let is_grow = main_size(direction, *grow_query.width, *grow_query.height).is_grow();
                 let size = axify(grow_query.props.size, direction);
+                let max_width = grow_query
+                    .max_width
+                    .map(|max_width| max_width.apply(props.size.x, Some(parent_size.x)));
+                let max_height = grow_query
+                    .max_height
+                    .map(|max_height| max_height.apply(props.size.x, Some(parent_size.x)));
+                let max_size = u16vec2(
+                    max_width.unwrap_or(u16::MAX),
+                    max_height.unwrap_or(u16::MAX),
+                );
+                let max_size = AxisSizes::from_u16vec2(max_size, direction);
                 GrowEntry {
                     is_grow,
                     size,
                     entity,
+                    max_size,
                 }
             })
             .collect::<Vec<_>>();
@@ -338,7 +380,8 @@ impl ElementCtx {
                                 entry.size.main_axis += growth + 1;
                                 remainder -= 1;
                             }
-                        }
+                        };
+                        entry.size.main_axis = entry.max_size.main_axis.min(entry.size.main_axis);
                     }
                     break;
                 }
@@ -350,6 +393,8 @@ impl ElementCtx {
                     for entry in buffer[..=end].iter_mut() {
                         if entry.is_grow {
                             entry.size.main_axis = target_size;
+                            entry.size.main_axis =
+                                entry.max_size.main_axis.min(entry.size.main_axis);
                         }
                     }
                     if remaining == 0 {
@@ -362,7 +407,8 @@ impl ElementCtx {
         for entry in buffer {
             let mut query = self.query_one::<GrowQuery>(entry.entity);
             let query = query.get().unwrap();
-            query.props.size = entry.size.to_u16vec2(direction);
+            query.props.size = entry.size.to_u16vec2(direction).min(max_size);
+            println!("{max_size:?}");
         }
 
         for child in children.iter() {
@@ -630,6 +676,13 @@ impl AxisSizes {
             cross_axis: self.cross_axis.min(other.cross_axis),
         }
     }
+    #[inline(always)]
+    fn max(self, other: AxisSizes) -> AxisSizes {
+        AxisSizes {
+            main_axis: self.main_axis.max(other.main_axis),
+            cross_axis: self.cross_axis.max(other.cross_axis),
+        }
+    }
     const fn with_main(mut self, value: u16) -> Self {
         self.main_axis = value;
         self
@@ -754,6 +807,14 @@ pub struct Width(pub Size);
 #[derive(Debug, Clone, Copy, Default, d::Deref)]
 pub struct Height(pub Size);
 
+/// defines the maximum [`Size`] on the x axis.
+#[derive(Debug, Clone, Copy, d::Deref)]
+pub struct MaxWidth(pub Size);
+
+/// defines the maximum [`Size`] on the y axis.
+#[derive(Debug, Clone, Copy, d::Deref)]
+pub struct MaxHeight(pub Size);
+
 macro_rules! impl_sizing_functions {
     ($ty:ty) => {
         impl $ty {
@@ -780,6 +841,8 @@ macro_rules! impl_sizing_functions {
 
 impl_sizing_functions!(Width);
 impl_sizing_functions!(Height);
+impl_sizing_functions!(MaxWidth);
+impl_sizing_functions!(MaxHeight);
 
 /// defines the gap on the main axis between child elements.
 /// defaults to: 0`
@@ -904,16 +967,15 @@ pub enum Size {
 }
 
 impl Size {
-    fn apply(self, to: &mut u16, parent_size: Option<u16>) {
+    fn apply(self, to: u16, parent_size: Option<u16>) -> u16 {
         match (self, parent_size) {
-            (Size::Fixed(f), _) => *to = f,
+            (Size::Fixed(f), _) => f,
             (Size::Percentage(p), Some(container)) => {
                 let size = (p as f32) * container as f32 / 100.0;
                 let size = size.round_ties_even();
-                *to = size as u16;
-                println!("{:?}", to);
+                size as u16
             }
-            _ => {}
+            _ => to,
         }
     }
 }
