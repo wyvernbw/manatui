@@ -1,228 +1,259 @@
-#[cfg(test)]
-mod inner {
-    use crate::prelude::*;
-    use hecs::World;
-    use mana_tui_macros::subview;
-    use mana_tui_macros::ui;
-    use ratatui::{buffer::Buffer, layout::Rect, widgets::Wrap};
-    use strum::IntoEnumIterator;
+#![cfg(test)]
 
-    use mana_tui_elemental::layout::{ElementCtx, TuiElMarker};
+use crate::prelude::*;
+use hecs::World;
+use mana_tui_macros::subview;
+use mana_tui_macros::ui;
+use ratatui::{buffer::Buffer, layout::Rect, widgets::Wrap};
+use strum::IntoEnumIterator;
 
-    fn buffer_to_string(buf: &Buffer) -> String {
-        buf.content()
-            .chunks(buf.area.width as usize)
-            .flat_map(|line| line.iter().map(|cell| cell.symbol()).chain(["\n"]))
-            .collect()
-    }
+use mana_tui_elemental::layout::{ElementCtx, TuiElMarker};
 
-    #[test]
-    fn test_grow_2() {
-        let mut ctx = ElementCtx::new();
-        let block = || Block::bordered().border_type(BorderType::Rounded);
-        let root = ui(block().title_top("parent"))
-            .with((
-                Width::fixed(36),
-                Height::fixed(18),
-                Direction::Horizontal,
-                Padding::uniform(1),
-            ))
-            .children((
-                ui(block().title_top("sidebar"))
-                    .with((Width::fixed(10), Height::grow(), Padding::uniform(1)))
-                    .child(ui(Paragraph::new(
-                        "this sidebar is so amazing it can have long text that wraps around",
-                    )
-                    .wrap(ratatui::widgets::Wrap { trim: false }))),
-                ui(block().title_top("child #1"))
-                    .with((
-                        Width::grow(),
-                        Height::grow(),
-                        Padding::uniform(1),
-                        Gap(1),
-                        Direction::Vertical,
-                    ))
-                    .children((
-                        ui(block().title_top("child #2")).with((Width::grow(), Height::grow())),
-                        ui(block().title_top("child #3")).with((Width::grow(), Height::grow())),
-                    )),
-            ));
-        let root = ctx.spawn_ui(root);
+fn buffer_to_string(buf: &Buffer) -> String {
+    buf.content()
+        .chunks(buf.area.width as usize)
+        .flat_map(|line| line.iter().map(|cell| cell.symbol()).chain(["\n"]))
+        .collect()
+}
 
-        let area = Rect::new(0, 0, 50, 24);
-        ctx.calculate_layout(root, area).unwrap();
-        let mut buf = Buffer::empty(area);
-        ctx.render(root, buf.area, &mut buf);
-    }
+#[test]
+fn test_grow_2() {
+    let mut ctx = ElementCtx::new();
+    let block = || Block::bordered().border_type(BorderType::Rounded);
+    let root = ui(block().title_top("parent"))
+        .with((
+            Width::fixed(36),
+            Height::fixed(18),
+            Direction::Horizontal,
+            Padding::uniform(1),
+        ))
+        .children((
+            ui(block().title_top("sidebar"))
+                .with((Width::fixed(10), Height::grow(), Padding::uniform(1)))
+                .child(ui(Paragraph::new(
+                    "this sidebar is so amazing it can have long text that wraps around",
+                )
+                .wrap(ratatui::widgets::Wrap { trim: false }))),
+            ui(block().title_top("child #1"))
+                .with((
+                    Width::grow(),
+                    Height::grow(),
+                    Padding::uniform(1),
+                    Gap(1),
+                    Direction::Vertical,
+                ))
+                .children((
+                    ui(block().title_top("child #2")).with((Width::grow(), Height::grow())),
+                    ui(block().title_top("child #3")).with((Width::grow(), Height::grow())),
+                )),
+        ));
+    let root = ctx.spawn_ui(root);
 
-    #[test]
-    fn test_grow_3() {
-        let root = ui! {
-            <Block .rounded Width::grow() Height::grow()>
-                <Block .rounded Width::grow() Height::grow()></Block>
+    let area = Rect::new(0, 0, 50, 24);
+    ctx.calculate_layout(root, area).unwrap();
+    let mut buf = Buffer::empty(area);
+    ctx.render(root, buf.area, &mut buf);
+}
+
+#[test]
+fn test_grow_3() {
+    let root = ui! {
+        <Block .rounded Width::grow() Height::grow()>
+            <Block .rounded Width::grow() Height::grow()></Block>
+        </Block>
+    };
+    println!(
+        "(2) type id of {} = {:?}",
+        std::any::type_name::<TuiElMarker>(),
+        std::any::TypeId::of::<TuiElMarker>()
+    );
+    let area = Rect::new(0, 0, 16, 8);
+    let mut ctx = ElementCtx::new();
+    let mut buf = Buffer::empty(area);
+
+    let root = ctx.spawn_ui(root);
+
+    ctx.calculate_layout(root, area).unwrap();
+    ctx.render(root, area, &mut buf);
+
+    assert_eq!(
+        buf,
+        Buffer::with_lines([
+            "╭──────────────╮",
+            "│╭────────────╮│",
+            "││            ││",
+            "││            ││",
+            "││            ││",
+            "││            ││",
+            "│╰────────────╯│",
+            "╰──────────────╯",
+        ])
+    );
+}
+
+#[test]
+fn test_gap() {
+    _ = tracing_subscriber::fmt::try_init();
+    _ = color_eyre::install();
+
+    let mut ctx = ElementCtx::new();
+    let root = ui! {
+        <Block .rounded .title_top="parent" Width::fit() Height::fit() Direction::Horizontal Gap(2)>
+            <Block .rounded Width::fixed(4) Height::fixed(3)>
+                "01"
             </Block>
-        };
-        println!(
-            "(2) type id of {} = {:?}",
-            std::any::type_name::<TuiElMarker>(),
-            std::any::TypeId::of::<TuiElMarker>()
-        );
-        let area = Rect::new(0, 0, 16, 8);
-        let mut ctx = ElementCtx::new();
-        let mut buf = Buffer::empty(area);
-
-        let root = ctx.spawn_ui(root);
-
-        ctx.calculate_layout(root, area).unwrap();
-        ctx.render(root, area, &mut buf);
-
-        assert_eq!(
-            buf,
-            Buffer::with_lines([
-                "╭──────────────╮",
-                "│╭────────────╮│",
-                "││            ││",
-                "││            ││",
-                "││            ││",
-                "││            ││",
-                "│╰────────────╯│",
-                "╰──────────────╯",
-            ])
-        );
-    }
-
-    #[test]
-    fn test_gap() {
-        _ = tracing_subscriber::fmt::try_init();
-        _ = color_eyre::install();
-
-        let mut ctx = ElementCtx::new();
-        let root = ui! {
-            <Block .rounded .title_top="parent" Width::fit() Height::fit() Direction::Horizontal Gap(2)>
-                <Block .rounded Width::fixed(4) Height::fixed(3)>
-                    "01"
-                </Block>
-                <Block .rounded Width::fixed(4) Height::fixed(3)>
-                    "02"
-                </Block>
-                <Block .rounded Width::fixed(4) Height::fixed(3)>
-                    "03"
-                </Block>
+            <Block .rounded Width::fixed(4) Height::fixed(3)>
+                "02"
             </Block>
-        };
-        let root = ctx.spawn_ui(root);
+            <Block .rounded Width::fixed(4) Height::fixed(3)>
+                "03"
+            </Block>
+        </Block>
+    };
+    let root = ctx.spawn_ui(root);
 
-        let mut buf = Buffer::empty(Rect::new(0, 0, 24, 6));
-        ctx.calculate_layout(root, buf.area).unwrap();
-        ctx.render(root, buf.area, &mut buf);
-        tracing::info!("\ntest_gap\n{}", buffer_to_string(&buf));
-    }
+    let mut buf = Buffer::empty(Rect::new(0, 0, 24, 6));
+    ctx.calculate_layout(root, buf.area).unwrap();
+    ctx.render(root, buf.area, &mut buf);
+    tracing::info!("\ntest_gap\n{}", buffer_to_string(&buf));
+}
 
-    #[test]
-    fn test_list_justify() {
-        _ = tracing_subscriber::fmt::try_init();
-        _ = color_eyre::install();
+#[test]
+fn test_list_justify() {
+    _ = tracing_subscriber::fmt::try_init();
+    _ = color_eyre::install();
 
-        let mut ctx = ElementCtx::new();
+    let mut ctx = ElementCtx::new();
 
-        #[subview]
-        fn numbered_box(idx: i32) -> View {
-            ui! {
-                <Block .rounded Width::fixed(4) Height::fixed(3)>
-                    // formatting out of the box :)
-                    "{idx:02}"
-                </Block>
-            }
+    #[subview]
+    fn numbered_box(idx: i32) -> View {
+        ui! {
+            <Block .rounded Width::fixed(4) Height::fixed(3)>
+                // formatting out of the box :)
+                "{idx:02}"
+            </Block>
         }
-        #[subview]
-        fn container(justify: MainJustify, children: impl AsChildren) -> View {
-            ui! {
-                <Block
-                    .title_top={format!("{justify:?}")}
-                    .rounded
-                    {justify}
-                    Width::fixed(24)
-                    Height::fixed(5)
-                    Direction::Horizontal
-                >
-                    {children}
-                </Block>
-            }
-        }
-        #[subview]
-        fn root() -> View {
-            ui! {
-                <Block>
-                {
-                    MainJustify::iter().map(|justify|
-                        ui! {
-                            <Container
-                                .justify={justify}
-                                .children={
-                                    (0..3).map(|idx| ui!{
-                                        <NumberedBox .idx={idx} />
-                                    })
-                                }
-                            />
-                        }
-                    )
-                }
-                </Block>
-            }
-        }
-        let root = ctx.spawn_ui(root());
-        let mut buf = Buffer::empty(Rect::new(0, 0, 24, 30));
-        ctx.calculate_layout(root, buf.area).unwrap();
-        ctx.render(root, buf.area, &mut buf);
-        let expected = Buffer::with_lines(vec![
-            "╭Start─────────────────╮",
-            "│╭──╮╭──╮╭──╮          │",
-            "││00││01││02│          │",
-            "│╰──╯╰──╯╰──╯          │",
-            "╰──────────────────────╯",
-            "╭Center────────────────╮",
-            "│     ╭──╮╭──╮╭──╮     │",
-            "│     │00││01││02│     │",
-            "│     ╰──╯╰──╯╰──╯     │",
-            "╰──────────────────────╯",
-            "╭SpaceBetween──────────╮",
-            "│╭──╮     ╭──╮     ╭──╮│",
-            "││00│     │01│     │02││",
-            "│╰──╯     ╰──╯     ╰──╯│",
-            "╰──────────────────────╯",
-            "╭SpaceAround───────────╮",
-            "│ ╭──╮   ╭──╮   ╭──╮   │",
-            "│ │00│   │01│   │02│   │",
-            "│ ╰──╯   ╰──╯   ╰──╯   │",
-            "╰──────────────────────╯",
-            "╭SpaceEvenly───────────╮",
-            "│  ╭──╮  ╭──╮  ╭──╮    │",
-            "│  │00│  │01│  │02│    │",
-            "│  ╰──╯  ╰──╯  ╰──╯    │",
-            "╰──────────────────────╯",
-            "╭End───────────────────╮",
-            "│          ╭──╮╭──╮╭──╮│",
-            "│          │00││01││02││",
-            "│          ╰──╯╰──╯╰──╯│",
-            "╰──────────────────────╯",
-        ]);
-
-        assert_eq!(buf, expected);
-        tracing::info!("\ntest_list_justify\n{}", buffer_to_string(&buf));
     }
-
-    #[test]
-    #[should_panic]
-    fn test_hecs() {
-        _ = color_eyre::install();
-        _ = tracing_subscriber::fmt::try_init();
-        let mut world = World::new();
-        let a = world.spawn((0i32, "hi"));
-        let b = world.spawn((1i32, "hello"));
-        let mut query1 = world.query_one::<&mut i32>(a);
-        let mut query2 = world.query_one::<&mut i32>(b);
-        let a = query1.get();
-        let b = query2.get();
-        assert_ne!(a, b);
+    #[subview]
+    fn container(justify: MainJustify, children: impl AsChildren) -> View {
+        ui! {
+            <Block
+                .title_top={format!("{justify:?}")}
+                .rounded
+                {justify}
+                Width::fixed(24)
+                Height::fixed(5)
+                Direction::Horizontal
+            >
+                {children}
+            </Block>
+        }
     }
+    #[subview]
+    fn root() -> View {
+        ui! {
+            <Block>
+            {
+                MainJustify::iter().map(|justify|
+                    ui! {
+                        <Container
+                            .justify={justify}
+                            .children={
+                                (0..3).map(|idx| ui!{
+                                    <NumberedBox .idx={idx} />
+                                })
+                            }
+                        />
+                    }
+                )
+            }
+            </Block>
+        }
+    }
+    let root = ctx.spawn_ui(root());
+    let mut buf = Buffer::empty(Rect::new(0, 0, 24, 30));
+    ctx.calculate_layout(root, buf.area).unwrap();
+    ctx.render(root, buf.area, &mut buf);
+    let expected = Buffer::with_lines(vec![
+        "╭Start─────────────────╮",
+        "│╭──╮╭──╮╭──╮          │",
+        "││00││01││02│          │",
+        "│╰──╯╰──╯╰──╯          │",
+        "╰──────────────────────╯",
+        "╭Center────────────────╮",
+        "│     ╭──╮╭──╮╭──╮     │",
+        "│     │00││01││02│     │",
+        "│     ╰──╯╰──╯╰──╯     │",
+        "╰──────────────────────╯",
+        "╭SpaceBetween──────────╮",
+        "│╭──╮     ╭──╮     ╭──╮│",
+        "││00│     │01│     │02││",
+        "│╰──╯     ╰──╯     ╰──╯│",
+        "╰──────────────────────╯",
+        "╭SpaceAround───────────╮",
+        "│ ╭──╮   ╭──╮   ╭──╮   │",
+        "│ │00│   │01│   │02│   │",
+        "│ ╰──╯   ╰──╯   ╰──╯   │",
+        "╰──────────────────────╯",
+        "╭SpaceEvenly───────────╮",
+        "│  ╭──╮  ╭──╮  ╭──╮    │",
+        "│  │00│  │01│  │02│    │",
+        "│  ╰──╯  ╰──╯  ╰──╯    │",
+        "╰──────────────────────╯",
+        "╭End───────────────────╮",
+        "│          ╭──╮╭──╮╭──╮│",
+        "│          │00││01││02││",
+        "│          ╰──╯╰──╯╰──╯│",
+        "╰──────────────────────╯",
+    ]);
+
+    assert_eq!(buf, expected);
+    tracing::info!("\ntest_list_justify\n{}", buffer_to_string(&buf));
+}
+
+#[test]
+#[should_panic]
+fn test_hecs() {
+    _ = color_eyre::install();
+    _ = tracing_subscriber::fmt::try_init();
+    let mut world = World::new();
+    let a = world.spawn((0i32, "hi"));
+    let b = world.spawn((1i32, "hello"));
+    let mut query1 = world.query_one::<&mut i32>(a);
+    let mut query2 = world.query_one::<&mut i32>(b);
+    let a = query1.get();
+    let b = query2.get();
+    assert_ne!(a, b);
+}
+
+#[test]
+fn test_percentage() {
+    let mut ctx = ElementCtx::new();
+    let root = ui! {
+        <Block .rounded .title_top="parent" Width::grow() Height::grow() Direction::Horizontal>
+            <Block .rounded .title_top="#1" Width::percentage(25) Height::grow()>
+                "25%"
+            </Block>
+            <Block .rounded .title_top="#2" Width::percentage(75) Height::grow()>
+                "75%"
+            </Block>
+        </Block>
+    };
+    let root = ctx.spawn_ui(root);
+
+    let mut buf = Buffer::empty(Rect::new(0, 0, 28, 5));
+
+    ctx.calculate_layout(root, buf.area).unwrap();
+    ctx.render(root, buf.area, &mut buf);
+
+    assert_eq!(
+        buf,
+        Buffer::with_lines([
+            "╭parent────────────────────╮",
+            "│╭#1──╮╭#2────────────────╮│",
+            "││25% ││75%               ││",
+            "│╰────╯╰──────────────────╯│",
+            "╰──────────────────────────╯",
+        ])
+    );
 }

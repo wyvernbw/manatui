@@ -137,29 +137,34 @@ impl ElementCtx {
     pub fn new() -> Self {
         Self::default()
     }
-    fn calculate_fit_sizes(&self, element: Element) -> Result<(), ComponentError> {
+    fn calculate_fit_sizes(
+        &self,
+        element: Element,
+        parent_size: U16Vec2,
+    ) -> Result<(), ComponentError> {
         let mut query = self
             .world
-            .query_one::<(&Width, &Height, &Padding, &Children, &Direction)>(element);
-        let (width, height, padding, children, direction) = query.get().unwrap();
+            .query::<(&Width, &Height, &Padding, &Children, &Direction)>();
+        let query = query.view();
+        let (width, height, padding, children, direction) = query.get(element).unwrap();
+
         let mut props_query = self.world.query_one::<&mut Props>(element);
         let props = props_query.get().unwrap();
 
-        if let Size::Fixed(size) = **width {
-            props.size.x = size;
-        }
-        if let Size::Fixed(size) = **height {
-            props.size.y = size;
-        }
+        width.apply(&mut props.size.x, Some(parent_size.x));
+        height.apply(&mut props.size.y, Some(parent_size.y));
+
         let inner_size = props.inner_size_from_padding(padding);
         let mut space_used = AxisSizes::default();
+
+        let props = *props;
 
         drop(props_query);
 
         children
             .iter()
             .try_for_each(|child| -> Result<(), ComponentError> {
-                self.calculate_fit_sizes(child)?;
+                self.calculate_fit_sizes(child, props.size)?;
                 Ok(())
             })?;
 
@@ -215,6 +220,7 @@ impl ElementCtx {
         &self,
         element: Element,
         is_root: bool,
+        parent_size: U16Vec2,
         area: Rect,
     ) -> Result<(), ComponentError> {
         if is_root {
@@ -232,13 +238,23 @@ impl ElementCtx {
             }
         }
 
-        let mut query = self
-            .world
-            .query_one::<(&mut Props, &Padding, &Children, &Direction, &Gap)>(element);
-        let (props, &padding, children, &direction, &gap) = query.get().unwrap();
+        let mut query = self.world.query_one::<(
+            &mut Props,
+            &Padding,
+            &Children,
+            &Direction,
+            &Gap,
+            &Width,
+            &Height,
+        )>(element);
+        let (props, &padding, children, &direction, &gap, &width, &height) = query.get().unwrap();
+
+        width.apply(&mut props.size.x, Some(parent_size.x));
+        height.apply(&mut props.size.y, Some(parent_size.y));
 
         let children = children.clone();
         let inner_size = props.inner_size_from_padding(&padding);
+        let props = *props;
 
         drop(query);
 
@@ -350,7 +366,7 @@ impl ElementCtx {
         }
 
         for child in children.iter() {
-            self.calculate_grow_sizes(child, false, area)?;
+            self.calculate_grow_sizes(child, false, inner_size, area)?;
         }
 
         Ok(())
@@ -510,8 +526,9 @@ impl ElementCtx {
             root_props.position = origin;
         }
 
-        self.calculate_fit_sizes(element)?;
-        self.calculate_grow_sizes(element, true, area)?;
+        let root_size = u16vec2(area.width, area.height);
+        self.calculate_fit_sizes(element, root_size)?;
+        self.calculate_grow_sizes(element, true, root_size, area)?;
         self.calculate_positions(element)?;
         self.layout_postprocess();
         Ok(())
@@ -752,6 +769,11 @@ macro_rules! impl_sizing_functions {
             pub const fn grow() -> Self {
                 Self(Size::Grow)
             }
+
+            /// create a [`Size::Percentage`] value
+            pub const fn percentage(value: u8) -> Self {
+                Self(Size::Percentage(value))
+            }
         }
     };
 }
@@ -877,6 +899,23 @@ pub enum Size {
     Fit,
     /// the element will grow to fill it's parent, following a water-filling strategy, i.e. the smallest elements grow first.
     Grow,
+    /// the element will be a percentage of it's parent size.
+    Percentage(u8),
+}
+
+impl Size {
+    fn apply(self, to: &mut u16, parent_size: Option<u16>) {
+        match (self, parent_size) {
+            (Size::Fixed(f), _) => *to = f,
+            (Size::Percentage(p), Some(container)) => {
+                let size = (p as f32) * container as f32 / 100.0;
+                let size = size.round_ties_even();
+                *to = size as u16;
+                println!("{:?}", to);
+            }
+            _ => {}
+        }
+    }
 }
 
 /// defines the alignment strategy on the main axis.
@@ -994,9 +1033,11 @@ impl Size {
             Size::Fixed(_) => false,
             Size::Fit => false,
             Size::Grow => false,
+            Size::Percentage(_) => false,
         }
     }
     fn is_grow(&self) -> bool {
-        matches!(self, Size::Grow)
+        // yes i know matches! exists but my lsp is tripping
+        if let Size::Grow = self { true } else { false }
     }
 }

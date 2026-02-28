@@ -399,6 +399,8 @@ impl_into_ui_builder_list_for_tuples!(0 U0, 1 U1, 2 U2, 3 U3, 4 U4, 5 U5, 6 U6, 
 
 pub(crate) struct ChildrenBuilders(pub(crate) Box<[EntityBuilder]>);
 
+pub(crate) struct Parent(pub(crate) Element);
+
 #[instrument(skip(world))]
 fn process_ui_system(world: &mut ElementCtx) {
     let mut to_process: VecDeque<Element> = world
@@ -413,7 +415,7 @@ fn process_ui_system(world: &mut ElementCtx) {
             let style = world.get::<&Style>(node).ok().map(|style| *style);
             // vvvvvvv you have caused me much pain
             // world.reserve_entities(builders.len() as u32);
-            let children = builders
+            let children: Vec<_> = builders
                 .iter_mut()
                 .map(|builder| {
                     let builder = builder.build();
@@ -428,6 +430,9 @@ fn process_ui_system(world: &mut ElementCtx) {
                     entity
                 })
                 .collect();
+            for child in children.iter() {
+                _ = world.insert_one(*child, Parent(node));
+            }
             world
                 .insert_one(node, Children::Some(Arc::new(children)))
                 .unwrap();
@@ -470,39 +475,59 @@ fn process_ui_system(world: &mut ElementCtx) {
         Span(&'a Span<'a>),
     }
 
-    for (node, text_query, width, height) in
-        world.query_mut::<(Entity, TextQuery, Option<&Width>, Option<&Height>)>()
     {
-        if enabled!(Level::TRACE) && (width.is_none() || height.is_none()) {
-            tracing::trace!(?node, "processing default size for text",);
-        }
-        let new_size = match text_query {
-            TextQuery::Text(text) => Some((text.width(), text.height())),
-            TextQuery::Paragraph(p) => {
-                let width = width
-                    .and_then(|w| match w.0 {
-                        Size::Fixed(value) => Some(value as usize),
-                        Size::Fit => None,
-                        Size::Grow => None,
-                    })
-                    .unwrap_or_else(|| p.line_width());
-                Some((width, p.line_count(width as u16)))
+        let mut query = world.query::<(
+            Entity,
+            TextQuery,
+            Option<&Width>,
+            Option<&Height>,
+            Option<&Parent>,
+        )>();
+        for (node, text_query, width, height, parent) in query.iter() {
+            if enabled!(Level::TRACE) && (width.is_none() || height.is_none()) {
+                tracing::trace!(?node, "processing default size for text",);
             }
-            TextQuery::Line(line) => Some((line.width(), 1)),
-            TextQuery::Span(span) => Some((span.width(), 1)),
-        };
-        if width.is_none() {
-            if let Some((width, _)) = new_size {
-                buffer.insert_one(node, Width::fixed(width as u16));
-            } else {
-                buffer.insert_one(node, Width::grow());
+            let new_size = match text_query {
+                TextQuery::Text(text) => Some((text.width(), text.height())),
+                TextQuery::Paragraph(p) => {
+                    let width = width
+                        .and_then(|w| match w.0 {
+                            Size::Fixed(value) => Some(value as usize),
+                            // TODO: set size
+                            Size::Percentage(value) => {
+                                if let Some(Parent(parent)) = parent {
+                                    let mut query = world.query_one::<&Props>(*parent);
+                                    let Ok(parent_props) = query.get() else {
+                                        return None;
+                                    };
+                                    let width = parent_props.size.x * (value as u16) / 100;
+                                    Some(width.into())
+                                } else {
+                                    None
+                                }
+                            }
+                            Size::Fit => None,
+                            Size::Grow => None,
+                        })
+                        .unwrap_or_else(|| p.line_width());
+                    Some((width, p.line_count(width as u16)))
+                }
+                TextQuery::Line(line) => Some((line.width(), 1)),
+                TextQuery::Span(span) => Some((span.width(), 1)),
+            };
+            if width.is_none() {
+                if let Some((width, _)) = new_size {
+                    buffer.insert_one(node, Width::fixed(width as u16));
+                } else {
+                    buffer.insert_one(node, Width::grow());
+                }
             }
-        }
-        if height.is_none() {
-            if let Some((_, height)) = new_size {
-                buffer.insert_one(node, Height::fixed(height as u16));
-            } else {
-                buffer.insert_one(node, Height::grow());
+            if height.is_none() {
+                if let Some((_, height)) = new_size {
+                    buffer.insert_one(node, Height::fixed(height as u16));
+                } else {
+                    buffer.insert_one(node, Height::grow());
+                }
             }
         }
     }
