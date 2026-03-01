@@ -4,6 +4,20 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+manatui = { version = "0.0.1", path = "..", features = ["macros", "nightly"] }
+criterion = "0.8.2"
+gungraun = "0.17.2"
+
+[profile.bench]
+debug = true
+
+[[bench]]
+name = "bench-gungraun-01"
+harness = false
+
+[[bench]]
+name = "bench-criterion-01"
+harness = false
 
 [lints]
 workspace = true

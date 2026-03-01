@@ -1,14 +1,32 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+use criterion::*;
+use manatui::{prelude::*, ratatui};
+use ratatui::prelude::*;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+#[inline]
+pub fn basic_render() {
+    let mut ctx = ElementCtx::new();
+    let root = ui! {
+        <Block .rounded .title_top="parent" Width::grow() Height::grow() Direction::Horizontal>
+            <Block .rounded .title_top="child" Width::percentage(70) MaxWidth::fixed(8) Height::grow()>
+                "hello"
+            </Block>
+        </Block>
+    };
+    let root = ctx.spawn_ui(root);
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
+    let mut buf = Buffer::empty(Rect::new(0, 0, 28, 5));
+
+    ctx.calculate_layout(root, buf.area).unwrap();
+    ctx.render(root, buf.area, &mut buf);
+
+    assert_eq!(
+        buf,
+        Buffer::with_lines([
+            "╭parent────────────────────╮",
+            "│╭child─╮                  │",
+            "││hello │                  │",
+            "│╰──────╯                  │",
+            "╰──────────────────────────╯",
+        ])
+    );
 }
