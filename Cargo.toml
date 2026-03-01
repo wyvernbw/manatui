@@ -1,37 +1,39 @@
 [package]
-name = "mana-tui"
+name = "manatui"
 version = "0.0.1"
 edition = "2024"
 license = "MIT"
 
 [features]
-macros = ["dep:bon", "dep:mana-tui-macros"]
-nightly = ["mana-tui-elemental/nightly"]
+macros = ["dep:bon", "dep:manatui-macros"]
+nightly = ["manatui-elemental/nightly"]
 
 [dependencies]
-mana-tui-elemental.workspace = true
-mana-tui-utils.workspace = true
-mana-tui-potion.workspace = true
-mana-tui-macros = { workspace = true, optional = true }
+manatui-elemental.workspace = true
+manatui-utils.workspace = true
+manatui-potion.workspace = true
+manatui-macros = { workspace = true, optional = true }
 ratatui.workspace = true
 bon = { workspace = true, optional = true }
 
 [dev-dependencies]
 bon.workspace = true
 color-eyre = "0.6.5"
+criterion = "0.8.2"
 hecs.workspace = true
-mana-tui-elemental.workspace = true
-mana-tui-macros.workspace = true
+iai = { version = "0.1.1", features = ["macro"] }
+manatui-elemental.workspace = true
+manatui-macros.workspace = true
 ratatui.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 
 [workspace]
 members = [
-    "mana-tui-elemental",
-    "mana-tui-macros",
-    "mana-tui-utils",
-    "mana-tui-potion",
+    "manatui-elemental",
+    "manatui-macros",
+    "manatui-utils",
+    "manatui-potion",
 ]
 resolver = "3"
 
@@ -44,10 +46,18 @@ hecs = { version = "0.11.0", features = ["macros"] }
 ratatui = { version = "0.30.0", features = ["unstable-rendered-line-info"] }
 tracing = "0.1.44"
 tracing-subscriber = "0.3.22"
-mana-tui-elemental = { path = "./mana-tui-elemental" }
-mana-tui-macros = { path = "./mana-tui-macros" }
-mana-tui-utils = { path = "./mana-tui-utils" }
-mana-tui-potion = { path = "./mana-tui-potion" }
+manatui-elemental = { path = "./manatui-elemental" }
+manatui-macros = { path = "./manatui-macros" }
+manatui-utils = { path = "./manatui-utils" }
+manatui-potion = { path = "./manatui-potion" }
 
 [workspace.lints.clippy]
 pedantic = "warn"
+
+[[bench]]
+name = "bench-iai-01"
+harness = false
+
+[[bench]]
+name = "bench-criterion-01"
+harness = false

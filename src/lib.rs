@@ -1,4 +1,4 @@
-//! [`mana-tui-elemental`]: mana_tui_elemental
+//! [`manatui-elemental`]: mana_tui_elemental
 //!
 #![doc = include_str!("../readme.md")]
 

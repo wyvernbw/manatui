@@ -1,5 +1,5 @@
 [package]
-name = "mana-tui-macros"
+name = "manatui-macros"
 version = "0.1.0"
 edition = "2024"
 
@@ -14,7 +14,7 @@ convert_case = "0.10.0"
 bon.workspace = true
 
 [dev-dependencies]
-mana-tui = { path = "..", features = ["nightly"]}
+manatui = { path = "..", features = ["nightly"]}
 ratatui.workspace = true
 
 [lints]

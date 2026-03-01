@@ -1,4 +1,4 @@
-# mana-tui
+# manatui
 
 never outta magic.
 
@@ -6,17 +6,17 @@ ECS based library for builiding performant TUI libraries when you need more than
 
 ## architecture:
 
-- [ ] `mana-tui`
-- [x] (optional) `mana-tui-macros`
+- [ ] `manatui`
+- [x] (optional) `manatui-macros`
   - manasx dsl
-- [ ] `mana-tui-beheaded`
+- [ ] `manatui-beheaded`
   - headless ui components
-- [x] [`mana-tui-elemental`][]
+- [x] [`manatui-elemental`][]
   - provides the basic element abstraction and layout engine
 - built on top of [ratatui](https://ratatui.rs/) & [hecs](https://docs.rs/hecs/latest/hecs/)
 
-[`mana-tui-elemental`]: ./mana-tui-elemental/
-[`mana-tui-macros`]: ./mana-tui-macros/
+[`manatui-elemental`]: ./manatui-elemental/
+[`manatui-macros`]: ./manatui-macros/
 
 ## Features
 
@@ -30,7 +30,7 @@ ECS based library for builiding performant TUI libraries when you need more than
 ╰────────────────╯
 ```
 
-Mana-tui has a full flexbox style layout engine in [`mana-tui-elemental`], the
+manatui has a full flexbox style layout engine in [`manatui-elemental`], the
 foundation of the library, that is more powerful than ratatui's built in layout
 options and easier to work with. In terms of interacting with it, the biggest
 difference is that elemental takes the full description of the layout upfront
@@ -82,7 +82,7 @@ let root = ui(block().title_top("parent"))
 // then, `spawn_ui` creates all entities and their relationships and does some post processing
 // to ensure sane defaults
 //
-// in mana-tui, every element or node is an entity in the ECS.
+// in manatui, every element or node is an entity in the ECS.
 let root = ctx.spawn_ui(root);
 // calculate the layout
 let mut buf = Buffer::empty(Rect::new(0, 0, 50, 24));

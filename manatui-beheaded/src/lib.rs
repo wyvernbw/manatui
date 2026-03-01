@@ -76,7 +76,7 @@ pub async fn read<T>(
     let queue = {
         let queue = world
             .get_resource::<&EventQueue>()
-            .expect("event queue not found: use mana-tui-beheaded::init first");
+            .expect("event queue not found: use manatui-beheaded::init first");
 
         queue.deref().clone()
     };

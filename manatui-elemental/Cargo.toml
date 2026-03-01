@@ -1,5 +1,5 @@
 [package]
-name = "mana-tui-elemental"
+name = "manatui-elemental"
 version = "0.0.1"
 edition = "2024"
 license = "MIT"
@@ -16,9 +16,9 @@ hecs.workspace = true
 glam.workspace = true
 strum = { version = "0.27.2", features = ["derive"] }
 tui-scrollview = "0.6.2"
-mana-tui-utils = { version = "0.1.0", path = "../mana-tui-utils" }
+manatui-utils = { version = "0.1.0", path = "../manatui-utils" }
 
 [dev-dependencies]
-mana-tui-macros.workspace = true 
+manatui-macros.workspace = true 
 tracing-subscriber = "0.3.22"
 color-eyre = "*"

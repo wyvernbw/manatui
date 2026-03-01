@@ -205,7 +205,7 @@ impl ElementCtx {
             }
             _ => {}
         }
-        tracing::trace!(target: "mana-tui::fit", ?element, ?props.size);
+        tracing::trace!(target: "manatui::fit", ?element, ?props.size);
         Ok(())
     }
     fn sum_space_used(&self, elements: &[Element]) -> U16Vec2 {
@@ -408,7 +408,6 @@ impl ElementCtx {
             let mut query = self.query_one::<GrowQuery>(entry.entity);
             let query = query.get().unwrap();
             query.props.size = entry.size.to_u16vec2(direction).min(max_size);
-            println!("{max_size:?}");
         }
 
         for child in children.iter() {

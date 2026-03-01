@@ -1,5 +1,5 @@
 [package]
-name = "mana-tui-utils"
+name = "manatui-utils"
 version = "0.1.0"
 edition = "2024"
 
@@ -14,8 +14,8 @@ smallvec = "1.15.1"
 im = "15.1.0"
 
 [dev-dependencies]
-mana-tui = { path = "..", features = ["nightly", "macros"] }
-mana-tui-macros.workspace = true 
+manatui = { path = "..", features = ["nightly", "macros"] }
+manatui-macros.workspace = true 
 tracing-subscriber = "0.3.22"
 
 [lints]
