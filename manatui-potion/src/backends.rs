@@ -52,7 +52,7 @@ impl<Msg, W: std::io::Write> MsgStream<Msg, W> {
 pub(crate) mod crossterm_backend {
     use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
     use glam::{I16Vec2, U16Vec2};
-    use mana_tui_utils::key;
+    use manatui_utils::key;
     use ratatui::prelude::CrosstermBackend;
     use tokio_stream::StreamExt;
 

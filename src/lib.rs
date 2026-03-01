@@ -1,18 +1,18 @@
-//! [`manatui-elemental`]: mana_tui_elemental
+//! [`manatui-elemental`]: manatui_elemental
 //!
 #![doc = include_str!("../readme.md")]
 
-extern crate self as mana_tui;
+extern crate self as manatui;
 
-pub use mana_tui_elemental;
-pub use mana_tui_potion;
-pub use mana_tui_utils;
+pub use manatui_elemental;
+pub use manatui_potion;
+pub use manatui_utils;
 
 pub mod prelude {
-    pub use mana_tui_elemental::prelude::*;
+    pub use manatui_elemental::prelude::*;
 
     #[cfg(feature = "macros")]
-    pub use mana_tui_macros::*;
+    pub use manatui_macros::*;
     #[cfg(feature = "macros")]
     pub extern crate bon;
 

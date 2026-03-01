@@ -4,8 +4,8 @@
 //!
 //! ```
 //! # use ratatui::widgets::Block;
-//! # use mana_tui_elemental::ui::*;
-//! # use mana_tui_elemental::prelude::*;
+//! # use manatui_elemental::ui::*;
+//! # use manatui_elemental::prelude::*;
 //!
 //! let mut ctx = ElementCtx::new();
 //! let root = ui(Block::new())
@@ -61,8 +61,8 @@ use crate::layout::{
 ///
 /// ```
 /// # use ratatui::widgets::Block;
-/// # use mana_tui_elemental::ui::*;
-/// # use mana_tui_elemental::prelude::*;
+/// # use manatui_elemental::ui::*;
+/// # use manatui_elemental::prelude::*;
 ///
 /// let mut ctx = ElementCtx::new();
 /// let root = ui(Block::new());
@@ -74,8 +74,8 @@ use crate::layout::{
 ///
 /// ```
 /// # use ratatui::widgets::Block;
-/// # use mana_tui_elemental::ui::*;
-/// # use mana_tui_elemental::prelude::*;
+/// # use manatui_elemental::ui::*;
+/// # use manatui_elemental::prelude::*;
 ///
 /// let mut ctx = ElementCtx::new();
 /// let root = ui(Block::new())
@@ -88,8 +88,8 @@ use crate::layout::{
 ///
 /// ```
 /// # use ratatui::widgets::Block;
-/// # use mana_tui_elemental::ui::*;
-/// # use mana_tui_elemental::prelude::*;
+/// # use manatui_elemental::ui::*;
+/// # use manatui_elemental::prelude::*;
 ///
 /// let mut ctx = ElementCtx::new();
 /// let root = ui(Block::new())
@@ -105,8 +105,8 @@ use crate::layout::{
 ///
 /// ```
 /// # use ratatui::widgets::Block;
-/// # use mana_tui_elemental::ui::*;
-/// # use mana_tui_elemental::prelude::*;
+/// # use manatui_elemental::ui::*;
+/// # use manatui_elemental::prelude::*;
 ///
 /// let mut ctx = ElementCtx::new();
 /// let root = ui(Block::new())
@@ -258,8 +258,8 @@ where
     /// # Example
     /// ```
     /// # use ratatui::widgets::Block;
-    /// # use mana_tui_elemental::ui::*;
-    /// # use mana_tui_elemental::prelude::*;
+    /// # use manatui_elemental::ui::*;
+    /// # use manatui_elemental::prelude::*;
     ///
     /// ui(Block::new())
     ///     .with((
@@ -618,8 +618,8 @@ impl ElementCtx {
 /// using manasx:
 ///
 /// ```
-/// use mana_tui_elemental::prelude::*;
-/// use mana_tui_macros::{subview, ui};
+/// use manatui_elemental::prelude::*;
+/// use manatui_macros::{subview, ui};
 ///
 /// #[subview]
 /// fn subview_test(name: &'static str) -> View {
@@ -639,8 +639,8 @@ impl ElementCtx {
 /// using builder sytnax:
 ///
 /// ```
-/// use mana_tui_elemental::prelude::*;
-/// use mana_tui_macros::{subview, ui};
+/// use manatui_elemental::prelude::*;
+/// use manatui_macros::{subview, ui};
 ///
 /// fn subview_test(name: &'static str) -> impl Into<View> {
 ///     ui(Text::raw(format!("hello {name}")))

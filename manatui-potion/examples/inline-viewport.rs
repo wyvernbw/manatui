@@ -1,13 +1,13 @@
 use anyhow::Result;
 use crossterm::event::{Event, KeyModifiers};
-use mana_tui::prelude::*;
-use mana_tui_macros::ui;
-use mana_tui_potion::{Effect, Message, focus::handlers::On};
-use mana_tui_utils::key;
+use manatui::prelude::*;
+use manatui_macros::ui;
+use manatui_potion::{Effect, Message, focus::handlers::On};
+use manatui_utils::key;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
-    mana_tui_potion::run()
+    manatui_potion::run()
         .quit_signal(|(), msg| matches!(msg, Msg::Quit))
         .update(async |model, _| (model, Effect::none()))
         .init(async || ((), Effect::none()))

@@ -33,7 +33,7 @@ members = [
     "manatui-elemental",
     "manatui-macros",
     "manatui-utils",
-    "manatui-potion",
+    "manatui-potion", "manatui-bench",
 ]
 resolver = "3"
 

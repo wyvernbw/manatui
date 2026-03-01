@@ -2,12 +2,12 @@
 
 use crate::prelude::*;
 use hecs::World;
-use mana_tui_macros::subview;
-use mana_tui_macros::ui;
+use manatui_macros::subview;
+use manatui_macros::ui;
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Wrap};
 use strum::IntoEnumIterator;
 
-use mana_tui_elemental::layout::{ElementCtx, TuiElMarker};
+use manatui_elemental::layout::{ElementCtx, TuiElMarker};
 
 fn buffer_to_string(buf: &Buffer) -> String {
     buf.content()

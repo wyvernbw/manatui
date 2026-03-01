@@ -10,7 +10,7 @@ use std::{
 use derive_more as d;
 use glam::{U16Vec2, u16vec2};
 use hecs::{CommandBuffer, Component, ComponentError, Entity, Query, World};
-use mana_tui_utils::{Ecs, EcsMut};
+use manatui_utils::{Ecs, EcsMut};
 use ratatui::{
     buffer::Buffer,
     layout::{Direction, Margin, Rect},
@@ -106,7 +106,7 @@ impl<W> IntoStateful for W where W: StatefulWidget + Sized {}
 /// # Example
 ///
 /// ```
-/// # use mana_tui_elemental::prelude::*;
+/// # use manatui_elemental::prelude::*;
 /// # use ratatui::buffer::Buffer;
 /// # use ratatui::layout::Rect;
 ///
@@ -872,7 +872,7 @@ pub struct Gap(pub u16);
 /// you can use this to iterate the children of an element like this
 ///
 /// ```rust
-/// # use mana_tui_elemental::prelude::*;
+/// # use manatui_elemental::prelude::*;
 /// # let mut ctx = ElementCtx::new();
 /// # let root = ui(Block::new())
 /// #     .with((Width(Size::Grow), Height(Size::Fixed(40))))

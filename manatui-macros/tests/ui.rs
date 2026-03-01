@@ -1,5 +1,5 @@
-use mana_tui::prelude::{strum::IntoEnumIterator, *};
-use mana_tui_macros::{subview, ui};
+use manatui::prelude::{strum::IntoEnumIterator, *};
+use manatui_macros::{subview, ui};
 
 #[subview]
 fn container(justify: MainJustify, children: impl AsChildren) -> View {

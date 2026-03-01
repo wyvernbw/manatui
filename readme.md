@@ -42,7 +42,7 @@ Here's how a layout definition might look with elemental:
 
 ```rust
 # use ratatui::{buffer::Buffer, layout::Rect};
-use mana_tui_elemental::prelude::*;
+use manatui_elemental::prelude::*;
 
 // first, create a context
 // the context efficiently stores widgets and their components (no Box<dyn _> in sight)
@@ -103,8 +103,8 @@ This is how our previous example would look like with manasx:
 
 ```rust
 # use ratatui::{buffer::Buffer, layout::Rect};
-use mana_tui_elemental::prelude::*;
-use mana_tui_macros::{subview, ui};  // the macros
+use manatui_elemental::prelude::*;
+use manatui_macros::{subview, ui};  // the macros
 
 let mut ctx = ElementCtx::new();
 

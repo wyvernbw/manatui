@@ -5,8 +5,8 @@ use std::{any::TypeId, ops::Index};
 use anyhow::anyhow;
 use hecs::{Entity, Or, TypeIdMap, World};
 use im::Vector;
-use mana_tui_elemental::layout::{Children, Props};
-use mana_tui_utils::resource::Resources;
+use manatui_elemental::layout::{Children, Props};
+use manatui_utils::resource::Resources;
 use ratatui::{layout::Rect, style::Style};
 
 use crate::{

@@ -1,8 +1,8 @@
 #![cfg(test)]
 
 use criterion::*;
-use mana_tui::prelude::*;
-use mana_tui_macros::ui;
+use manatui::prelude::*;
+use manatui_macros::ui;
 use ratatui::prelude::*;
 
 #[inline]

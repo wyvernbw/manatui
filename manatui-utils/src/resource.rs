@@ -122,7 +122,7 @@ pub mod res_tests {
 
     #[test]
     #[should_panic(
-        expected = "there can only be one resource of type mana_tui_beheaded::ecs_ext::Res<&std::collections::hash::map::HashMap<alloc::string::String, i32>>"
+        expected = "there can only be one resource of type manatui_beheaded::ecs_ext::Res<&std::collections::hash::map::HashMap<alloc::string::String, i32>>"
     )]
     fn test_multiple_insertions() {
         let mut world = World::new();

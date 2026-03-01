@@ -7,13 +7,13 @@ mod utils;
 
 use crate::manasx::ManaElement;
 use crate::subview::SubviewFn;
-use crate::utils::mana_tui_elemental;
+use crate::utils::manatui_elemental;
 
 /// # Example
 ///
 ///```
-/// use mana_tui_macros::ui;
-/// use mana_tui::prelude::*;
+/// use manatui_macros::ui;
+/// use manatui::prelude::*;
 ///
 /// let root = ui! {
 ///    <Block .title_top="sidebar" Width(Size::Fixed(10)) Padding::uniform(1)>
@@ -27,7 +27,7 @@ pub fn ui(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     // let input = input.into();
     let tree = parse_macro_input!(input as ManaElement);
     let tree = quote! { #tree };
-    let mana_crate = mana_tui_elemental();
+    let mana_crate = manatui_elemental();
     let tokens = quote! {
         {
             use #mana_crate::ui::__ui_internal;

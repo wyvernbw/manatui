@@ -2,14 +2,14 @@ use std::io::stdout;
 use std::time::Duration;
 
 use crossterm::event::{EnableMouseCapture, Event, KeyEvent, KeyModifiers};
-use mana_tui_elemental::prelude::*;
-use mana_tui_elemental::ui::View;
-use mana_tui_macros::{subview, ui};
-use mana_tui_potion::backends::{DefaultEvent, KeyEventExt};
-use mana_tui_potion::focus::handlers::{ClickOnEnter, On, OnClickOrKey};
-use mana_tui_potion::focus::{FocusStyle, FocusTarget};
-use mana_tui_potion::{Effect, Message, run};
-use mana_tui_utils::key;
+use manatui_elemental::prelude::*;
+use manatui_elemental::ui::View;
+use manatui_macros::{subview, ui};
+use manatui_potion::backends::{DefaultEvent, KeyEventExt};
+use manatui_potion::focus::handlers::{ClickOnEnter, On, OnClickOrKey};
+use manatui_potion::focus::{FocusStyle, FocusTarget};
+use manatui_potion::{Effect, Message, run};
+use manatui_utils::key;
 use ratatui::style::Style;
 
 #[tokio::main(flavor = "current_thread")]
