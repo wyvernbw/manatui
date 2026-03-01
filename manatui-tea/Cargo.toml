@@ -1,5 +1,5 @@
 [package]
-name = "manatui-potion"
+name = "manatui-tea"
 version = "0.1.0"
 edition = "2024"
 
@@ -9,7 +9,7 @@ crossterm = ["dep:crossterm"]
 scroll = ["ratatui/scrolling-regions"]
 
 [dependencies]
-manatui-elemental.workspace = true
+manatui-layout.workspace = true
 ratatui.workspace = true
 bon = { workspace = true, features = ["experimental-overwritable"] }
 derive_more.workspace = true

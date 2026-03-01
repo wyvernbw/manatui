@@ -2,7 +2,7 @@
 #![forbid(missing_docs)]
 #![cfg_attr(feature = "nightly", feature(trait_alias))]
 
-extern crate self as manatui_elemental;
+extern crate self as manatui_layout;
 
 pub mod layout;
 pub mod prelude;

@@ -2,7 +2,7 @@ use convert_case::Casing;
 use quote::{format_ident, quote_spanned};
 use syn::{PatType, spanned::Spanned};
 
-use crate::utils::manatui_elemental;
+use crate::utils::manatui_layout;
 
 pub struct SubviewFn {
     func: syn::ItemFn,
@@ -40,7 +40,7 @@ impl quote::ToTokens for SubviewFn {
             let name = format_ident!("{name}");
             name
         };
-        let mana_crate = manatui_elemental();
+        let mana_crate = manatui_layout();
         let builder_module = format_ident!("{func_name}");
 
         let mut generics = generics.clone();

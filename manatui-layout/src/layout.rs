@@ -106,7 +106,7 @@ impl<W> IntoStateful for W where W: StatefulWidget + Sized {}
 /// # Example
 ///
 /// ```
-/// # use manatui_elemental::prelude::*;
+/// # use manatui_layout::prelude::*;
 /// # use ratatui::buffer::Buffer;
 /// # use ratatui::layout::Rect;
 ///
@@ -872,7 +872,7 @@ pub struct Gap(pub u16);
 /// you can use this to iterate the children of an element like this
 ///
 /// ```rust
-/// # use manatui_elemental::prelude::*;
+/// # use manatui_layout::prelude::*;
 /// # let mut ctx = ElementCtx::new();
 /// # let root = ui(Block::new())
 /// #     .with((Width(Size::Grow), Height(Size::Fixed(40))))

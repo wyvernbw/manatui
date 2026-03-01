@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```
-//! use manatui_elemental::prelude::*;
+//! use manatui_layout::prelude::*;
 //! ```
 
 pub use crate::layout::TuiElMarker;

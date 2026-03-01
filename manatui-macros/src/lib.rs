@@ -7,7 +7,7 @@ mod utils;
 
 use crate::manasx::ManaElement;
 use crate::subview::SubviewFn;
-use crate::utils::manatui_elemental;
+use crate::utils::manatui_layout;
 
 /// # Example
 ///
@@ -27,7 +27,7 @@ pub fn ui(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     // let input = input.into();
     let tree = parse_macro_input!(input as ManaElement);
     let tree = quote! { #tree };
-    let mana_crate = manatui_elemental();
+    let mana_crate = manatui_layout();
     let tokens = quote! {
         {
             use #mana_crate::ui::__ui_internal;

@@ -10,7 +10,7 @@ use std::io::stdout;
 use crossterm::terminal::enable_raw_mode;
 use flume::{Receiver, Sender};
 use hecs::Component;
-use manatui_elemental::{
+use manatui_layout::{
     layout::{Element, ElementCtx},
     ui::View,
 };
@@ -222,7 +222,7 @@ where
     enable_raw_mode().map_err(|_| RuntimeErr::InitErr)?;
 
     let mut ctx = Ctx {
-        el_ctx: manatui_elemental::prelude::ElementCtx::new(),
+        el_ctx: manatui_layout::prelude::ElementCtx::new(),
         terminal,
     };
 

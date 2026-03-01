@@ -2,13 +2,13 @@ use std::io::stdout;
 use std::time::Duration;
 
 use crossterm::event::{EnableMouseCapture, Event, KeyEvent, KeyModifiers};
-use manatui_elemental::prelude::*;
-use manatui_elemental::ui::View;
+use manatui_layout::prelude::*;
+use manatui_layout::ui::View;
 use manatui_macros::{subview, ui};
-use manatui_potion::backends::{DefaultEvent, KeyEventExt};
-use manatui_potion::focus::handlers::{ClickOnEnter, On, OnClickOrKey};
-use manatui_potion::focus::{FocusStyle, FocusTarget};
-use manatui_potion::{Effect, Message, run};
+use manatui_tea::backends::{DefaultEvent, KeyEventExt};
+use manatui_tea::focus::handlers::{ClickOnEnter, On, OnClickOrKey};
+use manatui_tea::focus::{FocusStyle, FocusTarget};
+use manatui_tea::{Effect, Message, run};
 use manatui_utils::key;
 use ratatui::style::Style;
 

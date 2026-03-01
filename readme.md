@@ -11,11 +11,11 @@ ECS based library for builiding performant TUI libraries when you need more than
   - manasx dsl
 - [ ] `manatui-beheaded`
   - headless ui components
-- [x] [`manatui-elemental`][]
+- [x] [`manatui-layout`][]
   - provides the basic element abstraction and layout engine
 - built on top of [ratatui](https://ratatui.rs/) & [hecs](https://docs.rs/hecs/latest/hecs/)
 
-[`manatui-elemental`]: ./manatui-elemental/
+[`manatui-layout`]: ./manatui-layout/
 [`manatui-macros`]: ./manatui-macros/
 
 ## Features
@@ -30,7 +30,7 @@ ECS based library for builiding performant TUI libraries when you need more than
 ╰────────────────╯
 ```
 
-manatui has a full flexbox style layout engine in [`manatui-elemental`], the
+manatui has a full flexbox style layout engine in [`manatui-layout`], the
 foundation of the library, that is more powerful than ratatui's built in layout
 options and easier to work with. In terms of interacting with it, the biggest
 difference is that elemental takes the full description of the layout upfront
@@ -42,7 +42,7 @@ Here's how a layout definition might look with elemental:
 
 ```rust
 # use ratatui::{buffer::Buffer, layout::Rect};
-use manatui_elemental::prelude::*;
+use manatui_layout::prelude::*;
 
 // first, create a context
 // the context efficiently stores widgets and their components (no Box<dyn _> in sight)
@@ -103,7 +103,7 @@ This is how our previous example would look like with manasx:
 
 ```rust
 # use ratatui::{buffer::Buffer, layout::Rect};
-use manatui_elemental::prelude::*;
+use manatui_layout::prelude::*;
 use manatui_macros::{subview, ui};  // the macros
 
 let mut ctx = ElementCtx::new();

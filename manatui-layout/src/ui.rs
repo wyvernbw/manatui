@@ -4,8 +4,8 @@
 //!
 //! ```
 //! # use ratatui::widgets::Block;
-//! # use manatui_elemental::ui::*;
-//! # use manatui_elemental::prelude::*;
+//! # use manatui_layout::ui::*;
+//! # use manatui_layout::prelude::*;
 //!
 //! let mut ctx = ElementCtx::new();
 //! let root = ui(Block::new())
@@ -61,8 +61,8 @@ use crate::layout::{
 ///
 /// ```
 /// # use ratatui::widgets::Block;
-/// # use manatui_elemental::ui::*;
-/// # use manatui_elemental::prelude::*;
+/// # use manatui_layout::ui::*;
+/// # use manatui_layout::prelude::*;
 ///
 /// let mut ctx = ElementCtx::new();
 /// let root = ui(Block::new());
@@ -74,8 +74,8 @@ use crate::layout::{
 ///
 /// ```
 /// # use ratatui::widgets::Block;
-/// # use manatui_elemental::ui::*;
-/// # use manatui_elemental::prelude::*;
+/// # use manatui_layout::ui::*;
+/// # use manatui_layout::prelude::*;
 ///
 /// let mut ctx = ElementCtx::new();
 /// let root = ui(Block::new())
@@ -88,8 +88,8 @@ use crate::layout::{
 ///
 /// ```
 /// # use ratatui::widgets::Block;
-/// # use manatui_elemental::ui::*;
-/// # use manatui_elemental::prelude::*;
+/// # use manatui_layout::ui::*;
+/// # use manatui_layout::prelude::*;
 ///
 /// let mut ctx = ElementCtx::new();
 /// let root = ui(Block::new())
@@ -105,8 +105,8 @@ use crate::layout::{
 ///
 /// ```
 /// # use ratatui::widgets::Block;
-/// # use manatui_elemental::ui::*;
-/// # use manatui_elemental::prelude::*;
+/// # use manatui_layout::ui::*;
+/// # use manatui_layout::prelude::*;
 ///
 /// let mut ctx = ElementCtx::new();
 /// let root = ui(Block::new())
@@ -258,8 +258,8 @@ where
     /// # Example
     /// ```
     /// # use ratatui::widgets::Block;
-    /// # use manatui_elemental::ui::*;
-    /// # use manatui_elemental::prelude::*;
+    /// # use manatui_layout::ui::*;
+    /// # use manatui_layout::prelude::*;
     ///
     /// ui(Block::new())
     ///     .with((
@@ -618,7 +618,7 @@ impl ElementCtx {
 /// using manasx:
 ///
 /// ```
-/// use manatui_elemental::prelude::*;
+/// use manatui_layout::prelude::*;
 /// use manatui_macros::{subview, ui};
 ///
 /// #[subview]
@@ -639,7 +639,7 @@ impl ElementCtx {
 /// using builder sytnax:
 ///
 /// ```
-/// use manatui_elemental::prelude::*;
+/// use manatui_layout::prelude::*;
 /// use manatui_macros::{subview, ui};
 ///
 /// fn subview_test(name: &'static str) -> impl Into<View> {

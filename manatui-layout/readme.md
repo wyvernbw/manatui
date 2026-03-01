@@ -1,3 +1,3 @@
-# manatui-elemental
+# manatui-layout
 
 The foundation of `manatui`.

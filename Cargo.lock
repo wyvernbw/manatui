@@ -982,9 +982,9 @@ dependencies = [
  "criterion",
  "hecs",
  "iai",
- "manatui-elemental",
+ "manatui-layout",
  "manatui-macros",
- "manatui-potion",
+ "manatui-tea",
  "manatui-utils",
  "ratatui",
  "tracing",
@@ -996,7 +996,7 @@ name = "manatui-bench"
 version = "0.1.0"
 
 [[package]]
-name = "manatui-elemental"
+name = "manatui-layout"
 version = "0.0.1"
 dependencies = [
  "bon",
@@ -1027,7 +1027,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "manatui-potion"
+name = "manatui-tea"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -1039,7 +1039,7 @@ dependencies = [
  "hecs",
  "im",
  "manatui",
- "manatui-elemental",
+ "manatui-layout",
  "manatui-macros",
  "manatui-utils",
  "ratatui",

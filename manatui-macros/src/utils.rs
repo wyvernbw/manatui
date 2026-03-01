@@ -1,7 +1,7 @@
 use quote::quote;
 
-pub fn manatui_elemental() -> proc_macro2::TokenStream {
+pub fn manatui_layout() -> proc_macro2::TokenStream {
     quote! {
-        ::manatui::manatui_elemental
+        ::manatui::manatui_layout
     }
 }

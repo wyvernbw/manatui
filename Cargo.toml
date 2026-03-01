@@ -6,12 +6,12 @@ license = "MIT"
 
 [features]
 macros = ["dep:bon", "dep:manatui-macros"]
-nightly = ["manatui-elemental/nightly"]
+nightly = ["manatui-layout/nightly"]
 
 [dependencies]
-manatui-elemental.workspace = true
+manatui-layout.workspace = true
 manatui-utils.workspace = true
-manatui-potion.workspace = true
+manatui-tea.workspace = true
 manatui-macros = { workspace = true, optional = true }
 ratatui.workspace = true
 bon = { workspace = true, optional = true }
@@ -22,7 +22,7 @@ color-eyre = "0.6.5"
 criterion = "0.8.2"
 hecs.workspace = true
 iai = { version = "0.1.1", features = ["macro"] }
-manatui-elemental.workspace = true
+manatui-layout.workspace = true
 manatui-macros.workspace = true
 ratatui.workspace = true
 tracing.workspace = true
@@ -30,10 +30,10 @@ tracing-subscriber.workspace = true
 
 [workspace]
 members = [
-    "manatui-elemental",
+    "manatui-layout",
     "manatui-macros",
     "manatui-utils",
-    "manatui-potion", "manatui-bench",
+    "manatui-tea", "manatui-bench",
 ]
 resolver = "3"
 
@@ -46,10 +46,10 @@ hecs = { version = "0.11.0", features = ["macros"] }
 ratatui = { version = "0.30.0", features = ["unstable-rendered-line-info"] }
 tracing = "0.1.44"
 tracing-subscriber = "0.3.22"
-manatui-elemental = { path = "./manatui-elemental" }
+manatui-layout = { path = "./manatui-layout" }
 manatui-macros = { path = "./manatui-macros" }
 manatui-utils = { path = "./manatui-utils" }
-manatui-potion = { path = "./manatui-potion" }
+manatui-tea = { path = "./manatui-tea" }
 
 [workspace.lints.clippy]
 pedantic = "warn"
