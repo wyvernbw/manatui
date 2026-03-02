@@ -493,14 +493,15 @@ fn process_ui_system(world: &mut ElementCtx) {
                     let width = width
                         .and_then(|w| match w.0 {
                             Size::Fixed(value) => Some(value as usize),
-                            // TODO: set size
                             Size::Percentage(value) => {
                                 if let Some(Parent(parent)) = parent {
-                                    let mut query = world.query_one::<&Props>(*parent);
-                                    let Ok(parent_props) = query.get() else {
+                                    let mut query = world.query_one::<(&Props, &Padding)>(*parent);
+                                    let Ok((parent_props, parent_padding)) = query.get() else {
                                         return None;
                                     };
-                                    let width = parent_props.size.x * (value as u16) / 100;
+                                    let inner_size =
+                                        parent_props.inner_size_from_padding(parent_padding);
+                                    let width = inner_size.x * (value as u16) / 100;
                                     Some(width.into())
                                 } else {
                                     None

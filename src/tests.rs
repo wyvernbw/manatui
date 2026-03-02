@@ -8,6 +8,7 @@ use ratatui::{buffer::Buffer, layout::Rect, widgets::Wrap};
 use strum::IntoEnumIterator;
 
 use manatui_layout::layout::{ElementCtx, TuiElMarker};
+use test_log::test;
 
 fn buffer_to_string(buf: &Buffer) -> String {
     buf.content()
@@ -17,7 +18,7 @@ fn buffer_to_string(buf: &Buffer) -> String {
 }
 
 #[test]
-fn test_grow_2() {
+fn test_grow_02() {
     let mut ctx = ElementCtx::new();
     let block = || Block::bordered().border_type(BorderType::Rounded);
     let root = ui(block().title_top("parent"))
@@ -56,17 +57,12 @@ fn test_grow_2() {
 }
 
 #[test]
-fn test_grow_3() {
+fn test_grow_03() {
     let root = ui! {
         <Block .rounded Width::grow() Height::grow()>
             <Block .rounded Width::grow() Height::grow()></Block>
         </Block>
     };
-    println!(
-        "(2) type id of {} = {:?}",
-        std::any::type_name::<TuiElMarker>(),
-        std::any::TypeId::of::<TuiElMarker>()
-    );
     let area = Rect::new(0, 0, 16, 8);
     let mut ctx = ElementCtx::new();
     let mut buf = Buffer::empty(area);
@@ -92,8 +88,36 @@ fn test_grow_3() {
 }
 
 #[test]
+fn test_grow_04() {
+    let root = ui! {
+        <Block .rounded Width::grow() Height::grow() Direction::Horizontal>
+            <Block .rounded Width::grow() Height::grow()/>
+            <Block .rounded Width::grow() Height::grow()/>
+        </Block>
+    };
+    let area = Rect::new(0, 0, 16, 5);
+    let mut ctx = ElementCtx::new();
+    let mut buf = Buffer::empty(area);
+
+    let root = ctx.spawn_ui(root);
+
+    ctx.calculate_layout(root, area).unwrap();
+    ctx.render(root, area, &mut buf);
+
+    assert_eq!(
+        buf,
+        Buffer::with_lines([
+            "╭──────────────╮",
+            "│╭─────╮╭─────╮│",
+            "││     ││     ││",
+            "│╰─────╯╰─────╯│",
+            "╰──────────────╯",
+        ])
+    );
+}
+
+#[test]
 fn test_gap() {
-    _ = tracing_subscriber::fmt::try_init();
     _ = color_eyre::install();
 
     let mut ctx = ElementCtx::new();
@@ -120,7 +144,6 @@ fn test_gap() {
 
 #[test]
 fn test_list_justify() {
-    _ = tracing_subscriber::fmt::try_init();
     _ = color_eyre::install();
 
     let mut ctx = ElementCtx::new();
@@ -215,7 +238,6 @@ fn test_list_justify() {
 #[should_panic]
 fn test_hecs() {
     _ = color_eyre::install();
-    _ = tracing_subscriber::fmt::try_init();
     let mut world = World::new();
     let a = world.spawn((0i32, "hi"));
     let b = world.spawn((1i32, "hello"));
@@ -292,7 +314,7 @@ fn test_max_width_02() {
     let mut ctx = ElementCtx::new();
     let root = ui! {
         <Block .rounded .title_top="parent" Width::grow() Height::grow() Direction::Horizontal>
-            <Block .rounded .title_top="child" Width::percentage(70) MaxWidth::fixed(8) Height::grow()>
+            <Block .rounded .title_top="child" Width::percentage(30) MaxWidth::fixed(8) Height::grow()>
                 "hello"
             </Block>
         </Block>

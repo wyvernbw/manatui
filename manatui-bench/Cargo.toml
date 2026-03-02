@@ -8,9 +8,6 @@ manatui = { version = "0.0.1", path = "..", features = ["macros", "nightly"] }
 criterion = "0.8.2"
 gungraun = "0.17.2"
 
-[profile.bench]
-debug = true
-
 [[bench]]
 name = "bench-gungraun-01"
 harness = false

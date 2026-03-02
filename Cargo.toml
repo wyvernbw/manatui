@@ -23,15 +23,17 @@ hecs.workspace = true
 manatui-layout.workspace = true
 manatui-macros.workspace = true
 ratatui.workspace = true
+test-log = { version = "0.2.19", features = ["trace"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
+tracing-test = "0.2.6"
 
 [workspace]
 members = [
     "manatui-layout",
     "manatui-macros",
     "manatui-utils",
-    "manatui-tea", "manatui-bench",
+    "manatui-tea", "manatui-bench", "xtask",
 ]
 resolver = "3"
 
@@ -50,3 +52,6 @@ manatui-tea = { path = "./manatui-tea" }
 
 [workspace.lints.clippy]
 pedantic = "warn"
+
+[profile.bench]
+debug = true

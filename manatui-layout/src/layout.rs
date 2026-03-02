@@ -9,7 +9,7 @@ use std::{
 
 use derive_more as d;
 use glam::{U16Vec2, u16vec2};
-use hecs::{CommandBuffer, Component, ComponentError, Entity, Query, World};
+use hecs::{CommandBuffer, Component, ComponentError, Entity, MissingComponent, View, World};
 use manatui_utils::{Ecs, EcsMut};
 use ratatui::{
     buffer::Buffer,
@@ -132,6 +132,28 @@ pub struct ElementCtx {
 impl Ecs for ElementCtx {}
 impl EcsMut for ElementCtx {}
 
+#[derive(hecs::Query)]
+struct NodeQuery<'a> {
+    props: &'a mut Props,
+    width: &'a Width,
+    height: &'a Height,
+    padding: &'a Padding,
+    children: &'a Children,
+    direction: &'a Direction,
+    gap: &'a Gap,
+    main_justify: &'a MainJustify,
+    cross_justify: &'a CrossJustify,
+    max_width: Option<&'a MaxWidth>,
+    max_height: Option<&'a MaxHeight>,
+    entity: Entity,
+}
+
+macro_rules! extract {
+    ($view:ident, $el:expr) => {
+        unsafe { $view.get_unchecked($el).ok_or(ComponentError::NoSuchEntity) }
+    };
+}
+
 impl ElementCtx {
     /// create an empty context.
     pub fn new() -> Self {
@@ -139,73 +161,61 @@ impl ElementCtx {
     }
     fn calculate_fit_sizes(
         &self,
+        view: &View<'_, NodeQuery<'_>>,
         element: Element,
         parent_size: U16Vec2,
     ) -> Result<(), ComponentError> {
-        let mut query = self
-            .world
-            .query::<(&Width, &Height, &Padding, &Children, &Direction)>();
-        let query = query.view();
-        let (width, height, padding, children, direction) = query.get(element).unwrap();
+        let el = extract!(view, element)?;
 
-        let mut props_query = self.world.query_one::<&mut Props>(element);
-        let props = props_query.get().unwrap();
+        el.props.size.x = el.width.apply(el.props.size.x, Some(parent_size.x));
+        el.props.size.y = el.height.apply(el.props.size.y, Some(parent_size.y));
 
-        props.size.x = width.apply(props.size.x, Some(parent_size.x));
-        props.size.y = height.apply(props.size.y, Some(parent_size.y));
-
-        let inner_size = props.inner_size_from_padding(padding);
+        let gap_space = el.children.len().saturating_sub(1) as u16 * **el.gap;
+        let inner_size = el.props.inner_size_from_padding(el.padding);
+        let mut inner_size = axify(inner_size, *el.direction);
+        inner_size.main_axis = inner_size.main_axis.saturating_sub(gap_space);
+        let inner_size = inner_size.to_u16vec2(*el.direction);
         let mut space_used = AxisSizes::default();
 
-        let props = *props;
-
-        drop(props_query);
-
-        children
+        el.children
             .iter()
             .try_for_each(|child| -> Result<(), ComponentError> {
-                self.calculate_fit_sizes(child, props.size)?;
+                self.calculate_fit_sizes(view, child, inner_size)?;
                 Ok(())
             })?;
 
-        for child in children {
-            let mut child_props = self.world.get::<&mut Props>(child)?;
-            if width.should_clamp() {
-                child_props.size.x = child_props.size.x.clamp(0, inner_size.x);
+        for child in el.children {
+            let child = unsafe {
+                view.get_unchecked(child)
+                    .ok_or(ComponentError::MissingComponent(MissingComponent::new::<
+                        Props,
+                    >()))?
+            };
+            if el.width.should_clamp() {
+                child.props.size.x = child.props.size.x.clamp(0, inner_size.x);
             }
-            if height.should_clamp() {
-                child_props.size.y = child_props.size.y.clamp(0, inner_size.x);
+            if el.height.should_clamp() {
+                child.props.size.y = child.props.size.y.clamp(0, inner_size.x);
             }
-            space_used = space_used.increase(child_props.size, *direction);
+            space_used = space_used.increase(child.props.size, *el.direction);
         }
 
-        let mut query = self.world.query_one::<(
-            &mut Props,
-            &Width,
-            &Height,
-            &Padding,
-            &Children,
-            &Direction,
-            &Gap,
-        )>(element);
-        let (props, width, height, padding, children, direction, gap) = query.get().unwrap();
-
-        space_used = space_used.pad(*padding, *direction);
-        space_used.main_axis += children.len().saturating_sub(1) as u16 * **gap;
-        let space_used = space_used.to_u16vec2(*direction);
-        match **width {
+        space_used = space_used.pad(*el.padding, *el.direction);
+        space_used.main_axis += gap_space;
+        let space_used = space_used.to_u16vec2(*el.direction);
+        match **el.width {
             Size::Fit | Size::Grow => {
-                props.size.x = space_used.x;
+                el.props.size.x = space_used.x;
             }
             _ => {}
         }
-        match **height {
+        match **el.height {
             Size::Fit | Size::Grow => {
-                props.size.y = space_used.y;
+                el.props.size.y = space_used.y;
             }
             _ => {}
         }
-        tracing::trace!(target: "manatui::fit", ?element, ?props.size);
+        tracing::trace!(target: "manatui::fit", ?element, ?el.props.size);
         Ok(())
     }
     fn sum_space_used(&self, elements: &[Element]) -> U16Vec2 {
@@ -216,229 +226,216 @@ impl ElementCtx {
             .map(|props| props.size)
             .sum::<U16Vec2>()
     }
+    fn sum_space_used_with_view(&self, view: &View<NodeQuery>, elements: &[Element]) -> U16Vec2 {
+        elements
+            .iter()
+            .copied()
+            .flat_map(|child| unsafe { view.get_unchecked(child) })
+            .map(|el| el.props.size)
+            .sum::<U16Vec2>()
+    }
     fn calculate_grow_sizes(
         &self,
+        view: &View<'_, NodeQuery<'_>>,
         element: Element,
         is_root: bool,
         parent_size: U16Vec2,
         area: Rect,
     ) -> Result<(), ComponentError> {
+        let el = extract!(view, element)?;
         if is_root {
-            let mut query = self
-                .world
-                .query_one::<(&mut Props, &Width, &Height)>(element);
-            let (props, width, height) = query.get().unwrap();
             // if the root element is set to grow, we want it to take up the entire
             // screen.
-            if width.is_grow() {
-                props.size.x = area.width;
+            if el.width.is_grow() {
+                el.props.size.x = area.width;
             }
-            if height.is_grow() {
-                props.size.y = area.height;
+            if el.height.is_grow() {
+                el.props.size.y = area.height;
             }
         }
 
-        let mut query = self.world.query_one::<(
-            &mut Props,
-            &Padding,
-            &Children,
-            &Direction,
-            &Gap,
-            &Width,
-            &Height,
-            Option<&MaxWidth>,
-            Option<&MaxHeight>,
-        )>(element);
-        let (props, &padding, children, &direction, &gap, &width, &height, max_width, max_height) =
-            query.get().unwrap();
+        el.props.size.x = el.width.apply(el.props.size.x, Some(parent_size.x));
+        el.props.size.y = el.height.apply(el.props.size.y, Some(parent_size.y));
 
-        let max_width =
-            max_width.map(|max_width| max_width.apply(props.size.x, Some(parent_size.x)));
-        let max_height =
-            max_height.map(|max_height| max_height.apply(props.size.x, Some(parent_size.x)));
-        let max_size = u16vec2(
-            max_width.unwrap_or(u16::MAX),
-            max_height.unwrap_or(u16::MAX),
-        );
-        props.size.x = width.apply(props.size.x, Some(parent_size.x));
-        props.size.y = height.apply(props.size.y, Some(parent_size.y));
-        props.size = props.size.min(max_size);
+        let gap_space = el.children.len().saturating_sub(1) as u16 * **el.gap;
+        let inner_size = el.props.inner_size_from_padding(el.padding);
+        let mut inner_size = axify(inner_size, *el.direction);
+        inner_size.main_axis -= gap_space;
+        let inner_size = inner_size.to_u16vec2(*el.direction);
 
-        let children = children.clone();
-        let inner_size = props.inner_size_from_padding(&padding);
-        let props = *props;
-
-        drop(query);
-
-        let space_used = self.sum_space_used(&children);
+        let space_used = self.sum_space_used_with_view(view, el.children);
         let remaining_size = inner_size.saturating_sub(space_used);
-        let mut remaining_size = axify(remaining_size, direction);
-        remaining_size.main_axis = remaining_size
-            .main_axis
-            .saturating_sub(children.len().saturating_sub(1) as u16 * *gap);
+        let remaining_size = axify(remaining_size, *el.direction);
 
         // cross axis
-        children
+        el.children
             .iter()
             .try_for_each(|child| -> Result<(), ComponentError> {
-                let mut child_query = self.world.query_one::<(
-                    &mut Props,
-                    &Width,
-                    &Height,
-                    Option<&MaxWidth>,
-                    Option<&MaxHeight>,
-                )>(child);
-                let (child_props, child_width, child_height, max_width, max_height) =
-                    child_query.get().unwrap();
-                if !cross_size(direction, *child_width, *child_height).is_grow() {
+                let child = extract!(view, child)?;
+                if !cross_size(*el.direction, *child.width, *child.height).is_grow() {
                     return Ok(());
                 }
-                let max_width =
-                    max_width.map(|max_width| max_width.apply(props.size.x, Some(parent_size.x)));
-                let max_height = max_height
-                    .map(|max_height| max_height.apply(props.size.x, Some(parent_size.x)));
+                let max_width = child
+                    .max_width
+                    .map(|max_width| max_width.apply(child.props.size.x, Some(parent_size.x)));
+                let max_height = child
+                    .max_height
+                    .map(|max_height| max_height.apply(child.props.size.y, Some(parent_size.y)));
                 let max_size = u16vec2(
                     max_width.unwrap_or(u16::MAX),
                     max_height.unwrap_or(u16::MAX),
                 );
-                let mut size = AxisSizes::from_u16vec2(child_props.size, direction);
-                size.cross_axis = axify(inner_size, direction).cross_axis;
-                child_props.size = size.to_u16vec2(direction).min(max_size);
+                let axis_props = AxisSizes::from_u16vec2(child.props.size, *el.direction);
+                let mut size = AxisSizes::from_u16vec2(inner_size, *el.direction);
+                size.cross_axis = axify(inner_size, *el.direction).cross_axis;
+                size.main_axis = axis_props.main_axis;
+                child.props.size = size.to_u16vec2(*el.direction).min(max_size);
+                tracing::info!(?child.props.size);
                 Ok(())
             })?;
 
-        // main axis
-        #[derive(Query, Debug)]
-        struct GrowQuery<'a> {
-            props: &'a mut Props,
-            width: &'a Width,
-            height: &'a Height,
-            max_width: Option<&'a MaxWidth>,
-            max_height: Option<&'a MaxHeight>,
-        }
         #[derive(d::Debug)]
         struct GrowEntry {
             is_grow: bool,
-            #[debug("({}, {})", self.size.main_axis, self.size.cross_axis)]
-            size: AxisSizes,
-            max_size: AxisSizes,
+            size: u16,
+            max_size: u16,
             entity: Element,
         }
-        let mut buffer = children
+
+        impl GrowEntry {
+            fn can_grow_main(&self) -> bool {
+                self.size < self.max_size
+            }
+        }
+
+        let mut buffer = el
+            .children
             .iter()
-            .map(|child| (self.query_one::<GrowQuery>(child), child))
-            .map(|(mut grow_query, entity)| {
-                let grow_query = grow_query.get().unwrap();
-                let is_grow = main_size(direction, *grow_query.width, *grow_query.height).is_grow();
-                let size = axify(grow_query.props.size, direction);
-                let max_width = grow_query
+            .map(|child| (extract!(view, child).unwrap(), child))
+            .map(|(child, entity)| {
+                let is_grow = main_size(*el.direction, *child.width, *child.height).is_grow();
+                let size = axify(child.props.size, *el.direction);
+                let max_width = child
                     .max_width
-                    .map(|max_width| max_width.apply(props.size.x, Some(parent_size.x)));
-                let max_height = grow_query
+                    .map(|max_width| max_width.apply(child.props.size.x, Some(inner_size.x)));
+                let max_height = child
                     .max_height
-                    .map(|max_height| max_height.apply(props.size.x, Some(parent_size.x)));
+                    .map(|max_height| max_height.apply(child.props.size.y, Some(inner_size.y)));
+                tracing::info!(?parent_size);
                 let max_size = u16vec2(
                     max_width.unwrap_or(u16::MAX),
                     max_height.unwrap_or(u16::MAX),
                 );
-                let max_size = AxisSizes::from_u16vec2(max_size, direction);
+                let max_size = AxisSizes::from_u16vec2(max_size, *el.direction);
                 GrowEntry {
                     is_grow,
-                    size,
+                    size: size.main_axis,
                     entity,
-                    max_size,
+                    max_size: max_size.main_axis,
                 }
             })
             .collect::<Vec<_>>();
-        buffer.sort_by_key(|entry| entry.size.main_axis);
+        buffer.sort_by_key(|entry| entry.size);
         let mut remaining = remaining_size.main_axis;
-        while let Some([smallest, rest @ ..]) = buffer.get_mut(..) {
-            let second_smallest = rest
-                .iter()
-                .position(|entry| entry.size.main_axis != smallest.size.main_axis);
-            match second_smallest {
-                None => {
-                    // distribute remaining space evenly
-                    // +1 to include smallest element
-                    let grow_count = rest.iter().filter(|entry| entry.is_grow).count() + 1;
-                    if grow_count == 0 {
-                        break;
-                    }
-                    let growth = remaining as usize / grow_count;
-                    let growth = growth as u16;
-                    let remainder = remaining as usize % grow_count;
-                    let mut remainder = remainder as u16;
-                    for entry in buffer.iter_mut() {
-                        if !entry.is_grow {
-                            continue;
-                        }
-                        match remainder {
-                            0 => {
-                                entry.size.main_axis += growth;
-                            }
-                            _ => {
-                                entry.size.main_axis += growth + 1;
-                                remainder -= 1;
-                            }
-                        };
-                        entry.size.main_axis = entry.max_size.main_axis.min(entry.size.main_axis);
-                    }
+        tracing::info!(?remaining, ?buffer);
+
+        let mut window = &mut buffer[..];
+        while remaining != 0 {
+            if window.is_empty() {
+                tracing::info!("no more");
+                break;
+            }
+            let mut target = None;
+
+            let mut count = window.len();
+            let mut grow_count = 0;
+
+            for (a_idx, [a, b]) in window.array_windows::<2>().enumerate() {
+                if a.is_grow {
+                    grow_count += 1;
+                }
+                if b.size > a.size {
+                    count = a_idx + 1;
+                    target = Some(b.size);
                     break;
                 }
-                Some(second_smallest) => {
-                    let end = second_smallest;
-                    let target_size = rest[second_smallest].size.main_axis;
-                    remaining = remaining
-                        .saturating_sub(target_size.saturating_sub(smallest.size.main_axis));
-                    for entry in buffer[..=end].iter_mut() {
-                        if entry.is_grow {
-                            entry.size.main_axis = target_size;
-                            entry.size.main_axis =
-                                entry.max_size.main_axis.min(entry.size.main_axis);
-                        }
-                    }
-                    if remaining == 0 {
-                        break;
-                    }
+            }
+            tracing::trace!(?target);
+            if let Some(last) = window.last() {
+                if last.is_grow {
+                    grow_count += 1;
                 }
             }
+            if grow_count == 0 {
+                window = &mut window[count..];
+                continue;
+            }
+
+            let (mut splittable, base_split) = match target {
+                Some(target) => (
+                    (target * grow_count).min(remaining),
+                    target.min(remaining / grow_count),
+                ),
+                None => (remaining, remaining / grow_count),
+            };
+            for entry in window.iter().take(count) {
+                if entry.max_size < base_split {
+                    splittable += base_split - entry.max_size;
+                }
+            }
+            let split = splittable / grow_count;
+            tracing::trace!(?base_split, ?splittable, ?split, ?grow_count);
+
+            for entry in window.iter_mut().take(count) {
+                if !entry.is_grow {
+                    continue;
+                }
+                let growth = split.clamp(0, entry.max_size.saturating_sub(entry.size));
+                tracing::info!(
+                    "growing from {} to {} (growth = {}))",
+                    entry.size,
+                    entry.size + growth,
+                    growth,
+                );
+                entry.size += growth;
+                remaining = remaining.saturating_sub(growth);
+            }
+
+            window = &mut window[count..];
+
+            tracing::trace!(?remaining);
         }
 
         for entry in buffer {
-            let mut query = self.query_one::<GrowQuery>(entry.entity);
-            let query = query.get().unwrap();
-            query.props.size = entry.size.to_u16vec2(direction).min(max_size);
+            let child = extract!(view, entry.entity)?;
+            let props =
+                AxisSizes::from_u16vec2(child.props.size, *el.direction).with_main(entry.size);
+            child.props.size = props.to_u16vec2(*el.direction);
+            tracing::info!(?entry.entity, final = ?child.props.size);
         }
 
-        for child in children.iter() {
-            self.calculate_grow_sizes(child, false, inner_size, area)?;
+        for child in el.children.iter() {
+            self.calculate_grow_sizes(view, child, false, inner_size, area)?;
         }
 
         Ok(())
     }
-    fn calculate_positions(&self, root: Element) -> Result<(), ComponentError> {
-        let mut query = self.world.query_one::<(
-            &Props,
-            &Padding,
-            &Children,
-            &Direction,
-            &Gap,
-            &MainJustify,
-            &CrossJustify,
-        )>(root);
-        let (&props, &padding, children, &dir, &gap, &main_justify, &cross_justify) =
-            query.get().unwrap();
-        let children = children.clone();
-        drop(query);
-        let space_used = self.sum_space_used(&children);
-        let space_used = axify(space_used, dir).main_axis;
-        let space_used = space_used + *gap * children.len().saturating_sub(1) as u16;
-        let inner_size = props.size.saturating_sub(u16vec2(
-            padding.left + padding.right,
-            padding.top + padding.bottom,
+    fn calculate_positions(
+        &self,
+        view: &View<NodeQuery>,
+        root: Element,
+    ) -> Result<(), ComponentError> {
+        let el = extract!(view, root)?;
+        let children = el.children.clone();
+        let space_used = self.sum_space_used_with_view(view, &children);
+        let space_used = axify(space_used, *el.direction).main_axis;
+        let space_used = space_used + **el.gap * children.len().saturating_sub(1) as u16;
+        let inner_size = el.props.size.saturating_sub(u16vec2(
+            el.padding.left + el.padding.right,
+            el.padding.top + el.padding.bottom,
         ));
-        let remaining_size = axify(props.size, dir)
-            .shrink(padding, dir)
+        let remaining_size = axify(el.props.size, *el.direction)
+            .shrink(*el.padding, *el.direction)
             .main_axis
             .saturating_sub(space_used);
 
@@ -461,7 +458,7 @@ impl ElementCtx {
             }
         }
 
-        let mut align = match main_justify {
+        let mut align = match el.main_justify {
             MainJustify::Start => AlignValues::default(),
             MainJustify::Center => AlignValues {
                 start: remaining_size / 2,
@@ -471,45 +468,43 @@ impl ElementCtx {
             MainJustify::SpaceBetween if children.is_empty() => AlignValues::default(),
             MainJustify::SpaceBetween => {
                 let div_by = (children.len().saturating_sub(1)) as u16;
-                if div_by == 0 {
-                    AlignValues::default()
-                } else {
-                    let space = remaining_size / div_by;
-                    let space_rem = remaining_size % div_by;
-                    AlignValues {
-                        start: 0,
-                        inbetween: space,
-                        remainder: space_rem,
+                match remaining_size.checked_div(div_by) {
+                    Some(space) => {
+                        let space_rem = remaining_size % div_by;
+                        AlignValues {
+                            start: 0,
+                            inbetween: space,
+                            remainder: space_rem,
+                        }
                     }
+                    None => AlignValues::default(),
                 }
             }
             MainJustify::SpaceAround if children.is_empty() => AlignValues::default(),
             MainJustify::SpaceAround => {
                 let div_by = (children.len() * 2) as u16;
-                if div_by == 0 {
-                    AlignValues::default()
-                } else {
-                    let space = remaining_size / div_by;
-                    let space_rem = remaining_size % div_by;
-                    AlignValues {
-                        start: space,
-                        inbetween: space * 2,
-                        remainder: space_rem,
+                match remaining_size.checked_div(div_by) {
+                    None => AlignValues::default(),
+                    Some(space) => {
+                        let space_rem = remaining_size % div_by;
+                        AlignValues {
+                            start: space,
+                            inbetween: space * 2,
+                            remainder: space_rem,
+                        }
                     }
                 }
             }
             MainJustify::SpaceEvenly if children.is_empty() => AlignValues::default(),
             MainJustify::SpaceEvenly => {
                 let div_by = (children.len() * 2) as u16 + 2;
-                if div_by == 0 {
-                    AlignValues::default()
-                } else {
-                    let space = remaining_size / div_by;
-                    AlignValues {
+                match remaining_size.checked_div(div_by) {
+                    None => AlignValues::default(),
+                    Some(space) => AlignValues {
                         start: space * 2,
                         inbetween: space * 2,
                         remainder: 0,
-                    }
+                    },
                 }
             }
             MainJustify::End => AlignValues {
@@ -523,15 +518,19 @@ impl ElementCtx {
             .iter()
             .try_for_each(|child| -> Result<(), ComponentError> {
                 {
-                    let mut child_props = self.world.get::<&mut Props>(child)?;
-                    child_props.position = props.position;
-                    match dir {
+                    let child = unsafe {
+                        view.get_unchecked(child)
+                            .ok_or(ComponentError::NoSuchEntity)?
+                    };
+                    let child_props = child.props;
+                    child_props.position = el.props.position;
+                    match el.direction {
                         Direction::Horizontal => child_props.position.x += align.start,
                         Direction::Vertical => child_props.position.y += align.start,
                     }
-                    child_props.position += u16vec2(padding.left, padding.top);
-                    align.start = increase_axis(align.start, dir, child_props.size);
-                    match (cross_justify, dir) {
+                    child_props.position += u16vec2(el.padding.left, el.padding.top);
+                    align.start = increase_axis(align.start, *el.direction, child_props.size);
+                    match (el.cross_justify, el.direction) {
                         (CrossJustify::Start, _) => {}
                         (CrossJustify::Center, Direction::Horizontal) => {
                             child_props.position.y +=
@@ -550,9 +549,9 @@ impl ElementCtx {
                                 inner_size.x.saturating_sub(child_props.size.x);
                         }
                     }
-                    align.start += *gap + align.inbetween + align.tick_rem();
+                    align.start += **el.gap + align.inbetween + align.tick_rem();
                 }
-                self.calculate_positions(child)?;
+                self.calculate_positions(view, child)?;
                 Ok(())
             })?;
 
@@ -572,9 +571,13 @@ impl ElementCtx {
         }
 
         let root_size = u16vec2(area.width, area.height);
-        self.calculate_fit_sizes(element, root_size)?;
-        self.calculate_grow_sizes(element, true, root_size, area)?;
-        self.calculate_positions(element)?;
+        {
+            let mut query = self.world.query::<NodeQuery>();
+            let view = query.view();
+            self.calculate_fit_sizes(&view, element, root_size)?;
+            self.calculate_grow_sizes(&view, element, true, root_size, area)?;
+            self.calculate_positions(&view, element)?;
+        }
         self.layout_postprocess();
         Ok(())
     }
@@ -772,13 +775,28 @@ pub struct Props {
 }
 
 impl Props {
-    fn inner_size_from_padding(&self, padding: &Padding) -> U16Vec2 {
+    #[inline]
+    pub(crate) const fn inner_size_from_padding(&self, padding: &Padding) -> U16Vec2 {
         self.inner_size(Margin {
             horizontal: padding.left + padding.right,
             vertical: padding.top + padding.bottom,
         })
     }
-    fn inner_size(&self, margin: Margin) -> U16Vec2 {
+    // #[inline]
+    // const fn inner_size_from_padding_and_gap(
+    //     &self,
+    //     padding: &Padding,
+    //     direction: &Direction,
+    //     gap: &Gap,
+    //     children: usize,
+    // ) -> U16Vec2 {
+    //     self.inner_size(Margin {
+    //         horizontal: padding.left + padding.right,
+    //         vertical: padding.top + padding.bottom,
+    //     })
+    // }
+    #[inline]
+    const fn inner_size(&self, margin: Margin) -> U16Vec2 {
         self.size
             .saturating_sub(u16vec2(margin.horizontal, margin.vertical))
     }
@@ -1098,7 +1116,6 @@ impl Size {
         }
     }
     fn is_grow(&self) -> bool {
-        // yes i know matches! exists but my lsp is tripping
-        if let Size::Grow = self { true } else { false }
+        matches!(self, Size::Grow)
     }
 }
