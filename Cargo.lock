@@ -1102,6 +1102,7 @@ dependencies = [
  "criterion",
  "gungraun",
  "manatui",
+ "test-log",
 ]
 
 [[package]]

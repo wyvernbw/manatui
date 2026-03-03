@@ -1,7 +1,10 @@
+use manatui::prelude::BlockExt;
 use manatui::{prelude::*, ratatui};
 use ratatui::prelude::*;
+use test_log::test;
 
 #[inline]
+#[test]
 pub fn basic_render() {
     let mut ctx = ElementCtx::new();
     let root = ui! {
@@ -43,7 +46,7 @@ pub fn complex_render() {
                     "item 3"
                     "item 4"
                 </Block>
-                <Block .rounded .title_top="info" Width::grow() Height::grow()>
+                <Block .rounded .title_top="info" Width::grow() Height::percentage(50)>
                     "status: ok"
                     "mem: 128mb"
                 </Block>

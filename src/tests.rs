@@ -136,10 +136,77 @@ fn test_gap() {
     };
     let root = ctx.spawn_ui(root);
 
-    let mut buf = Buffer::empty(Rect::new(0, 0, 24, 6));
+    let mut buf = Buffer::empty(Rect::new(0, 0, 18, 5));
     ctx.calculate_layout(root, buf.area).unwrap();
     ctx.render(root, buf.area, &mut buf);
-    tracing::info!("\ntest_gap\n{}", buffer_to_string(&buf));
+    assert_eq!(
+        buf,
+        Buffer::with_lines([
+            "╭parent──────────╮",
+            "│╭──╮  ╭──╮  ╭──╮│",
+            "││01│  │02│  │03││",
+            "│╰──╯  ╰──╯  ╰──╯│",
+            "╰────────────────╯",
+        ])
+    );
+}
+
+#[test]
+fn test_grow_05() {
+    let mut ctx = ElementCtx::new();
+
+    #[subview]
+    fn sidebar() -> View {
+        let value = "i am formatted";
+        ui! {
+            <Block .rounded .title_top="sidebar" Width::fixed(10) Height::grow()>
+                <Paragraph .wrap={Wrap::default()} Height::grow()>
+                ""
+                </Paragraph>
+            </Block>
+        }
+    }
+
+    let root = ui! {
+        <Block
+            .rounded .title_top="parent"
+            Width::fixed(36) Height::fixed(18) Direction::Horizontal Padding::uniform(1)
+        >
+            <Sidebar />
+            <Block .rounded .title_top="child #1"
+                Width::grow() Height::grow() Padding::uniform(1) Gap(1) Direction::Vertical
+            >
+                <Block .rounded .title_top="child #2" Width::grow() Height::grow()/>
+                <Block .rounded .title_top="child #3" Width::grow() Height::grow()/>
+            </Block>
+        </Block>
+    };
+    let root = ctx.spawn_ui(root);
+    let mut buf = Buffer::empty(Rect::new(0, 0, 36, 18));
+    ctx.calculate_layout(root, buf.area).unwrap();
+    ctx.render(root, buf.area, &mut buf);
+
+    let expected = Buffer::with_lines(vec![
+        "╭parent────────────────────────────╮",
+        "│╭sidebar─╮╭child #1──────────────╮│",
+        "││        ││╭child #2────────────╮││",
+        "││        │││                    │││",
+        "││        │││                    │││",
+        "││        │││                    │││",
+        "││        │││                    │││",
+        "││        │││                    │││",
+        "││        ││╰────────────────────╯││",
+        "││        ││                      ││",
+        "││        ││╭child #3────────────╮││",
+        "││        │││                    │││",
+        "││        │││                    │││",
+        "││        │││                    │││",
+        "││        │││                    │││",
+        "││        ││╰────────────────────╯││",
+        "│╰────────╯╰──────────────────────╯│",
+        "╰──────────────────────────────────╯",
+    ]);
+    assert_eq!(buf, expected);
 }
 
 #[test]
@@ -249,7 +316,7 @@ fn test_hecs() {
 }
 
 #[test]
-fn test_percentage() {
+fn test_percentage_01() {
     let mut ctx = ElementCtx::new();
     let root = ui! {
         <Block .rounded .title_top="parent" Width::grow() Height::grow() Direction::Horizontal>
@@ -272,9 +339,41 @@ fn test_percentage() {
         buf,
         Buffer::with_lines([
             "╭parent────────────────────╮",
-            "│╭#1──╮╭#2────────────────╮│",
-            "││25% ││75%               ││",
-            "│╰────╯╰──────────────────╯│",
+            "│╭#1───╮╭#2───────────────╮│",
+            "││25%  ││75%              ││",
+            "│╰─────╯╰─────────────────╯│",
+            "╰──────────────────────────╯",
+        ])
+    );
+}
+
+#[test]
+fn test_percentage_02() {
+    let mut ctx = ElementCtx::new();
+    let root = ui! {
+        <Block .rounded .title_top="parent" Width::grow() Height::grow() Direction::Horizontal>
+            <Block .rounded .title_top="#1" Width::percentage(25) Height::grow()>
+                "25%"
+            </Block>
+            <Block .rounded .title_top="#2" Width::grow() Height::grow()>
+                "75%"
+            </Block>
+        </Block>
+    };
+    let root = ctx.spawn_ui(root);
+
+    let mut buf = Buffer::empty(Rect::new(0, 0, 28, 5));
+
+    ctx.calculate_layout(root, buf.area).unwrap();
+    ctx.render(root, buf.area, &mut buf);
+
+    assert_eq!(
+        buf,
+        Buffer::with_lines([
+            "╭parent────────────────────╮",
+            "│╭#1───╮╭#2───────────────╮│",
+            "││25%  ││75%              ││",
+            "│╰─────╯╰─────────────────╯│",
             "╰──────────────────────────╯",
         ])
     );

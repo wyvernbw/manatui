@@ -3,13 +3,13 @@
 //! implements the layout algorithm.
 use std::{
     any::TypeId,
-    ops::{Deref, Div},
+    ops::{Deref, DerefMut, Div},
     sync::Arc,
 };
 
 use derive_more as d;
-use glam::{U16Vec2, u16vec2};
-use hecs::{CommandBuffer, Component, ComponentError, Entity, MissingComponent, View, World};
+use glam::{U16Vec2, Vec2, Vec2Swizzles, u16vec2};
+use hecs::{CommandBuffer, Component, ComponentError, Entity, View, World};
 use manatui_utils::{Ecs, EcsMut};
 use ratatui::{
     buffer::Buffer,
@@ -148,9 +148,30 @@ struct NodeQuery<'a> {
     entity: Entity,
 }
 
+impl<'a> NodeQuery<'a> {
+    #[inline(always)]
+    fn compute_inner_size(&self) -> U16Vec2 {
+        let gap_space = self.children.len().saturating_sub(1) as u16 * **self.gap;
+        let inner_size = self.props.inner_size_from_padding(self.padding);
+        let mut inner_size = axify(inner_size, *self.direction);
+        inner_size.main_axis = inner_size.main_axis.saturating_sub(gap_space);
+
+        inner_size.to_u16vec2(*self.direction)
+    }
+}
+
 macro_rules! extract {
     ($view:ident, $el:expr) => {
         unsafe { $view.get_unchecked($el).ok_or(ComponentError::NoSuchEntity) }
+    };
+}
+
+macro_rules! axis_mut {
+    (cross: $value:expr, $dir:expr) => {
+        match $dir {
+            Direction::Horizontal => &mut $value.y,
+            Direction::Vertical => &mut $value.x,
+        }
     };
 }
 
@@ -163,58 +184,39 @@ impl ElementCtx {
         &self,
         view: &View<'_, NodeQuery<'_>>,
         element: Element,
-        parent_size: U16Vec2,
     ) -> Result<(), ComponentError> {
         let el = extract!(view, element)?;
 
-        el.props.size.x = el.width.apply(el.props.size.x, Some(parent_size.x));
-        el.props.size.y = el.height.apply(el.props.size.y, Some(parent_size.y));
-
         let gap_space = el.children.len().saturating_sub(1) as u16 * **el.gap;
-        let inner_size = el.props.inner_size_from_padding(el.padding);
-        let mut inner_size = axify(inner_size, *el.direction);
-        inner_size.main_axis = inner_size.main_axis.saturating_sub(gap_space);
-        let inner_size = inner_size.to_u16vec2(*el.direction);
         let mut space_used = AxisSizes::default();
+
+        let max_width = el.max_width.unwrap_or(&MaxWidth(Size::Fit));
+        let max_height = el.max_height.unwrap_or(&MaxHeight(Size::Fit));
+        let max_size = u16vec2(
+            *max_width.as_fixed().unwrap_or(&u16::MAX),
+            *max_height.as_fixed().unwrap_or(&u16::MAX),
+        );
 
         el.children
             .iter()
             .try_for_each(|child| -> Result<(), ComponentError> {
-                self.calculate_fit_sizes(view, child, inner_size)?;
+                self.calculate_fit_sizes(view, child)?;
+
+                let child = extract!(view, child)?;
+                space_used = space_used.increase(child.props.size, *el.direction);
                 Ok(())
             })?;
-
-        for child in el.children {
-            let child = unsafe {
-                view.get_unchecked(child)
-                    .ok_or(ComponentError::MissingComponent(MissingComponent::new::<
-                        Props,
-                    >()))?
-            };
-            if el.width.should_clamp() {
-                child.props.size.x = child.props.size.x.clamp(0, inner_size.x);
-            }
-            if el.height.should_clamp() {
-                child.props.size.y = child.props.size.y.clamp(0, inner_size.x);
-            }
-            space_used = space_used.increase(child.props.size, *el.direction);
-        }
 
         space_used = space_used.pad(*el.padding, *el.direction);
         space_used.main_axis += gap_space;
         let space_used = space_used.to_u16vec2(*el.direction);
-        match **el.width {
-            Size::Fit | Size::Grow => {
-                el.props.size.x = space_used.x;
-            }
-            _ => {}
-        }
-        match **el.height {
-            Size::Fit | Size::Grow => {
-                el.props.size.y = space_used.y;
-            }
-            _ => {}
-        }
+
+        let size = u16vec2(
+            *el.width.as_fixed().unwrap_or(&space_used.x),
+            *el.height.as_fixed().unwrap_or(&space_used.y),
+        );
+        el.props.size = size.clamp(U16Vec2::ZERO, max_size);
+
         tracing::trace!(target: "manatui::fit", ?element, ?el.props.size);
         Ok(())
     }
@@ -239,7 +241,6 @@ impl ElementCtx {
         view: &View<'_, NodeQuery<'_>>,
         element: Element,
         is_root: bool,
-        parent_size: U16Vec2,
         area: Rect,
     ) -> Result<(), ComponentError> {
         let el = extract!(view, element)?;
@@ -254,170 +255,151 @@ impl ElementCtx {
             }
         }
 
-        el.props.size.x = el.width.apply(el.props.size.x, Some(parent_size.x));
-        el.props.size.y = el.height.apply(el.props.size.y, Some(parent_size.y));
+        let inner_size = el.compute_inner_size();
 
-        let gap_space = el.children.len().saturating_sub(1) as u16 * **el.gap;
-        let inner_size = el.props.inner_size_from_padding(el.padding);
-        let mut inner_size = axify(inner_size, *el.direction);
-        inner_size.main_axis -= gap_space;
-        let inner_size = inner_size.to_u16vec2(*el.direction);
-
-        let space_used = self.sum_space_used_with_view(view, el.children);
-        let remaining_size = inner_size.saturating_sub(space_used);
-        let remaining_size = axify(remaining_size, *el.direction);
-
-        // cross axis
-        el.children
-            .iter()
-            .try_for_each(|child| -> Result<(), ComponentError> {
-                let child = extract!(view, child)?;
-                if !cross_size(*el.direction, *child.width, *child.height).is_grow() {
-                    return Ok(());
-                }
-                let max_width = child
-                    .max_width
-                    .map(|max_width| max_width.apply(child.props.size.x, Some(parent_size.x)));
-                let max_height = child
-                    .max_height
-                    .map(|max_height| max_height.apply(child.props.size.y, Some(parent_size.y)));
-                let max_size = u16vec2(
-                    max_width.unwrap_or(u16::MAX),
-                    max_height.unwrap_or(u16::MAX),
-                );
-                let axis_props = AxisSizes::from_u16vec2(child.props.size, *el.direction);
-                let mut size = AxisSizes::from_u16vec2(inner_size, *el.direction);
-                size.cross_axis = axify(inner_size, *el.direction).cross_axis;
-                size.main_axis = axis_props.main_axis;
-                child.props.size = size.to_u16vec2(*el.direction).min(max_size);
-                tracing::info!(?child.props.size);
-                Ok(())
-            })?;
-
-        #[derive(d::Debug)]
+        #[derive(Debug)]
         struct GrowEntry {
-            is_grow: bool,
+            can_grow: bool,
+            entity: Element,
             size: u16,
             max_size: u16,
-            entity: Element,
         }
 
-        impl GrowEntry {
-            fn can_grow_main(&self) -> bool {
-                self.size < self.max_size
-            }
-        }
-
+        let mut inner_size_float_max = inner_size.as_vec2();
+        let mut inner_size_float = inner_size.as_vec2();
         let mut buffer = el
             .children
             .iter()
-            .map(|child| (extract!(view, child).unwrap(), child))
-            .map(|(child, entity)| {
-                let is_grow = main_size(*el.direction, *child.width, *child.height).is_grow();
-                let size = axify(child.props.size, *el.direction);
-                let max_width = child
-                    .max_width
-                    .map(|max_width| max_width.apply(child.props.size.x, Some(inner_size.x)));
-                let max_height = child
-                    .max_height
-                    .map(|max_height| max_height.apply(child.props.size.y, Some(inner_size.y)));
-                tracing::info!(?parent_size);
+            .flat_map(|child| -> Result<_, ComponentError> {
+                let child = extract!(view, child)?;
+                let max_width = child.max_width.unwrap_or(&MaxWidth(Size::Fit));
+                let max_height = child.max_height.unwrap_or(&MaxHeight(Size::Fit));
                 let max_size = u16vec2(
-                    max_width.unwrap_or(u16::MAX),
-                    max_height.unwrap_or(u16::MAX),
+                    max_width
+                        .compute_from_parent(&mut inner_size_float_max.x)
+                        .unwrap_or(u16::MAX),
+                    max_height
+                        .compute_from_parent(&mut inner_size_float_max.y)
+                        .unwrap_or(u16::MAX),
                 );
-                let max_size = AxisSizes::from_u16vec2(max_size, *el.direction);
-                GrowEntry {
-                    is_grow,
-                    size: size.main_axis,
-                    entity,
-                    max_size: max_size.main_axis,
+
+                // cross axis calculation
+                let cross_axis = child.props.size.cross_axis_mut(*el.direction);
+                let cross_axis_max_size = *(*max_width, *max_height).cross_axis(*el.direction);
+                let cross_axis_inner_size = inner_size_float.cross_axis_mut(*el.direction);
+                let cross_axis_max_size_computed =
+                    cross_axis_max_size.compute_from_parent(cross_axis_inner_size);
+                match cross_axis_max_size_computed {
+                    Some(value) => {
+                        *cross_axis = value;
+                    }
+                    None => {
+                        *cross_axis = *cross_axis_inner_size as u16;
+                    }
                 }
+                *cross_axis = (*cross_axis).clamp(0u16, *max_size.cross_axis(*el.direction));
+
+                let main_axis = child.props.size.main_axis_mut(*el.direction);
+                let main_axis_size = *(*child.width, *child.height).main_axis(*el.direction);
+                let main_axis_size_computed = main_axis_size
+                    .compute_from_parent(inner_size_float.main_axis_mut(*el.direction));
+                if let Some(value) = main_axis_size_computed {
+                    *main_axis = value;
+                }
+                let can_grow = main_axis_size.is_grow();
+
+                Ok(GrowEntry {
+                    can_grow,
+                    entity: child.entity,
+                    size: *main_axis,
+                    max_size: *max_size.main_axis(*el.direction),
+                })
             })
             .collect::<Vec<_>>();
+
         buffer.sort_by_key(|entry| entry.size);
+
+        let space_used = self.sum_space_used_with_view(view, el.children);
+
+        let remaining_size = inner_size.saturating_sub(space_used);
+        let remaining_size = axify(remaining_size, *el.direction);
         let mut remaining = remaining_size.main_axis;
-        tracing::info!(?remaining, ?buffer);
 
-        let mut window = &mut buffer[..];
-        while remaining != 0 {
-            if window.is_empty() {
-                tracing::info!("no more");
-                break;
-            }
-            let mut target = None;
+        let mut search_start = 0;
+        let grow_count = buffer.iter().filter(|e| e.can_grow).count();
+        tracing::info!(?remaining, ?grow_count, ?buffer);
 
-            let mut count = window.len();
-            let mut grow_count = 0;
+        #[expect(clippy::manual_checked_ops)]
+        if grow_count != 0 {
+            while remaining != 0 {
+                // find smallest and second smallest element
+                let smallest = buffer
+                    .array_windows::<2>()
+                    .skip(search_start)
+                    .position(|[a, b]| b.size > a.size);
 
-            for (a_idx, [a, b]) in window.array_windows::<2>().enumerate() {
-                if a.is_grow {
-                    grow_count += 1;
-                }
-                if b.size > a.size {
-                    count = a_idx + 1;
-                    target = Some(b.size);
+                let Some(smallest) = smallest else {
+                    for entry in buffer.iter() {
+                        if !entry.can_grow {
+                            continue;
+                        }
+                        remaining += entry.size.saturating_sub(entry.max_size);
+                    }
+                    let split = remaining as usize / grow_count;
+                    let split = split as u16;
+                    for entry in buffer.iter_mut() {
+                        if !entry.can_grow {
+                            continue;
+                        }
+                        entry.size += split;
+                    }
+
+                    let used = split * grow_count as u16;
+                    remaining = remaining.saturating_sub(used);
+                    for entry in buffer.iter_mut() {
+                        if remaining == 0 {
+                            break;
+                        }
+                        if !entry.can_grow {
+                            continue;
+                        }
+                        entry.size += 1;
+                        remaining -= 1;
+                    }
                     break;
+                };
+                let second_smallest = smallest + 1;
+                search_start = second_smallest;
+                let smallest_size = buffer[smallest].size;
+                let second_smallest_size = buffer[second_smallest].size;
+                for entry in buffer.iter_mut() {
+                    if entry.size == smallest_size {
+                        let difference = second_smallest_size.saturating_sub(entry.size);
+                        entry.size = second_smallest_size;
+                        if entry.can_grow {
+                            remaining = remaining.saturating_sub(difference);
+                        }
+                    }
                 }
             }
-            tracing::trace!(?target);
-            if let Some(last) = window.last() {
-                if last.is_grow {
-                    grow_count += 1;
-                }
-            }
-            if grow_count == 0 {
-                window = &mut window[count..];
-                continue;
-            }
-
-            let (mut splittable, base_split) = match target {
-                Some(target) => (
-                    (target * grow_count).min(remaining),
-                    target.min(remaining / grow_count),
-                ),
-                None => (remaining, remaining / grow_count),
-            };
-            for entry in window.iter().take(count) {
-                if entry.max_size < base_split {
-                    splittable += base_split - entry.max_size;
-                }
-            }
-            let split = splittable / grow_count;
-            tracing::trace!(?base_split, ?splittable, ?split, ?grow_count);
-
-            for entry in window.iter_mut().take(count) {
-                if !entry.is_grow {
-                    continue;
-                }
-                let growth = split.clamp(0, entry.max_size.saturating_sub(entry.size));
-                tracing::info!(
-                    "growing from {} to {} (growth = {}))",
-                    entry.size,
-                    entry.size + growth,
-                    growth,
-                );
-                entry.size += growth;
-                remaining = remaining.saturating_sub(growth);
-            }
-
-            window = &mut window[count..];
-
-            tracing::trace!(?remaining);
         }
 
         for entry in buffer {
+            if !entry.can_grow {
+                continue;
+            }
             let child = extract!(view, entry.entity)?;
-            let props =
-                AxisSizes::from_u16vec2(child.props.size, *el.direction).with_main(entry.size);
+            let props = AxisSizes::from_u16vec2(child.props.size, *el.direction)
+                .with_main(entry.size.clamp(0, entry.max_size));
             child.props.size = props.to_u16vec2(*el.direction);
-            tracing::info!(?entry.entity, final = ?child.props.size);
+            tracing::info!(?child.entity, final = ?child.props.size, ?entry.max_size);
         }
 
         for child in el.children.iter() {
-            self.calculate_grow_sizes(view, child, false, inner_size, area)?;
+            self.calculate_grow_sizes(view, child, false, area)?;
         }
 
+        // tracing::info!(?el.entity, final = ?el.props.size);
         Ok(())
     }
     fn calculate_positions(
@@ -574,8 +556,8 @@ impl ElementCtx {
         {
             let mut query = self.world.query::<NodeQuery>();
             let view = query.view();
-            self.calculate_fit_sizes(&view, element, root_size)?;
-            self.calculate_grow_sizes(&view, element, true, root_size, area)?;
+            self.calculate_fit_sizes(&view, element)?;
+            self.calculate_grow_sizes(&view, element, true, area)?;
             self.calculate_positions(&view, element)?;
         }
         self.layout_postprocess();
@@ -668,6 +650,14 @@ struct AxisSizes {
 
 const fn axify(vec: U16Vec2, dir: Direction) -> AxisSizes {
     AxisSizes::from_u16vec2(vec, dir)
+}
+
+/// convention: x is cross axis, y is main axis
+const fn into_axis(vec: U16Vec2, dir: Direction) -> U16Vec2 {
+    match dir {
+        Direction::Horizontal => u16vec2(vec.y, vec.x),
+        Direction::Vertical => vec,
+    }
 }
 
 impl AxisSizes {
@@ -782,19 +772,6 @@ impl Props {
             vertical: padding.top + padding.bottom,
         })
     }
-    // #[inline]
-    // const fn inner_size_from_padding_and_gap(
-    //     &self,
-    //     padding: &Padding,
-    //     direction: &Direction,
-    //     gap: &Gap,
-    //     children: usize,
-    // ) -> U16Vec2 {
-    //     self.inner_size(Margin {
-    //         horizontal: padding.left + padding.right,
-    //         vertical: padding.top + padding.bottom,
-    //     })
-    // }
     #[inline]
     const fn inner_size(&self, margin: Margin) -> U16Vec2 {
         self.size
@@ -983,15 +960,40 @@ pub enum Size {
     Percentage(u8),
 }
 
+#[bon::bon]
 impl Size {
-    fn apply(self, to: u16, parent_size: Option<u16>) -> u16 {
-        match (self, parent_size) {
-            (Size::Fixed(f), _) => f,
-            (Size::Percentage(p), Some(container)) => {
-                let size = (p as f32) * container as f32 / 100.0;
-                let size = size.round_ties_even();
+    const fn compute_from_parent(self, parent_size: &mut f32) -> Option<u16> {
+        match self {
+            Size::Fixed(f) => Some(f),
+            Size::Fit => None,
+            Size::Grow => None,
+            Size::Percentage(p) => {
+                let size = (p as f64) * *parent_size as f64 / 100.0;
+                match size.fract() {
+                    0.0..0.5 => {
+                        let size = size.round();
+                        Some(size as u16)
+                    }
+                    fract @ 0.5.. => {
+                        let size = size.round();
+                        *parent_size -= fract as f32;
+                        Some(size as u16)
+                    }
+                    _ => unreachable!(),
+                }
+            }
+        }
+    }
+    #[builder]
+    const fn apply(self, to: u16, parent_size: Option<u16>, space_used: Option<u16>) -> u16 {
+        match (self, parent_size, space_used) {
+            (Size::Fixed(f), _, _) => f,
+            (Size::Percentage(p), Some(container), _) => {
+                let size = (p as f64) * container as f64 / 100.0;
+                let size = size.round();
                 size as u16
             }
+            (Size::Fit | Size::Grow, _, Some(space_used)) => space_used,
             _ => to,
         }
     }
@@ -1117,5 +1119,134 @@ impl Size {
     }
     fn is_grow(&self) -> bool {
         matches!(self, Size::Grow)
+    }
+
+    /// Returns `true` if the size is [`Percentage`].
+    ///
+    /// [`Percentage`]: Size::Percentage
+    #[must_use]
+    pub fn is_percentage(&self) -> bool {
+        matches!(self, Self::Percentage(..))
+    }
+
+    /// Returns percentage value as `Some(u8)` if the size is [`Percentage`].
+    ///
+    /// [`Percentage`]: Size::Percentage
+    #[must_use]
+    pub fn as_percentage(&self) -> Option<&u8> {
+        if let Self::Percentage(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn as_fixed(&self) -> Option<&u16> {
+        if let Self::Fixed(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+}
+
+trait AxisExt {
+    type El;
+    fn main_axis(&self, dir: Direction) -> &Self::El;
+    fn cross_axis(&self, dir: Direction) -> &Self::El;
+}
+
+trait AxisExtMut: AxisExt {
+    fn main_axis_mut(&mut self, dir: Direction) -> &mut Self::El;
+    fn cross_axis_mut(&mut self, dir: Direction) -> &mut Self::El;
+}
+macro_rules! impl_axis_ext {
+    ($($type:ty => $el:ty),* $(,)?) => {
+        $(
+            impl AxisExt for $type {
+                type El = $el;
+
+                #[inline(always)]
+                fn main_axis(&self, dir: Direction) -> &Self::El {
+                    match dir {
+                        Direction::Horizontal => &self.x,
+                        Direction::Vertical => &self.y,
+                    }
+                }
+
+                #[inline(always)]
+                fn cross_axis(&self, dir: Direction) -> &Self::El {
+                    match dir {
+                        Direction::Horizontal => &self.y,
+                        Direction::Vertical => &self.x,
+                    }
+                }
+            }
+
+            impl AxisExtMut for $type {
+                #[inline(always)]
+                fn main_axis_mut(&mut self, dir: Direction) -> &mut Self::El {
+                    match dir {
+                        Direction::Horizontal => &mut self.x,
+                        Direction::Vertical => &mut self.y,
+                    }
+                }
+
+                #[inline(always)]
+                fn cross_axis_mut(&mut self, dir: Direction) -> &mut Self::El {
+                    match dir {
+                        Direction::Horizontal => &mut self.y,
+                        Direction::Vertical => &mut self.x,
+                    }
+                }
+            }
+        )*
+    };
+}
+
+impl_axis_ext!(
+    U16Vec2 => u16,
+    Vec2 => f32,
+);
+
+impl<T, U, W> AxisExt for (U, W)
+where
+    U: Deref<Target = T>,
+    W: Deref<Target = T>,
+{
+    type El = T;
+
+    fn main_axis(&self, dir: Direction) -> &Self::El {
+        match dir {
+            Direction::Horizontal => &self.0,
+            Direction::Vertical => &self.1,
+        }
+    }
+
+    fn cross_axis(&self, dir: Direction) -> &Self::El {
+        match dir {
+            Direction::Horizontal => &self.1,
+            Direction::Vertical => &self.0,
+        }
+    }
+}
+
+impl<T, U, W> AxisExtMut for (U, W)
+where
+    U: DerefMut<Target = T>,
+    W: DerefMut<Target = T>,
+{
+    fn main_axis_mut(&mut self, dir: Direction) -> &mut Self::El {
+        match dir {
+            Direction::Horizontal => self.0.deref_mut(),
+            Direction::Vertical => self.1.deref_mut(),
+        }
+    }
+
+    fn cross_axis_mut(&mut self, dir: Direction) -> &mut Self::El {
+        match dir {
+            Direction::Horizontal => &mut self.1,
+            Direction::Vertical => &mut self.0,
+        }
     }
 }
