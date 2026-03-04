@@ -18,6 +18,7 @@ use ratatui::{
     widgets::{Padding, Widget},
 };
 use ratatui::{layout::Offset, widgets::StatefulWidget};
+use tracing::instrument;
 pub use tui_scrollview::{ScrollView, ScrollViewState};
 
 /// trait for rendering elements through a shared reference. this is automatically implemented
@@ -327,7 +328,6 @@ impl ElementCtx {
 
         let mut search_start = 0;
         let grow_count = buffer.iter().filter(|e| e.can_grow).count();
-        tracing::info!(?remaining, ?grow_count, ?buffer);
 
         #[expect(clippy::manual_checked_ops)]
         if grow_count != 0 {
@@ -375,7 +375,8 @@ impl ElementCtx {
                 for entry in buffer.iter_mut() {
                     if entry.size == smallest_size {
                         let difference = second_smallest_size.saturating_sub(entry.size);
-                        entry.size = second_smallest_size;
+                        let difference = difference.clamp(0, remaining);
+                        entry.size += difference;
                         if entry.can_grow {
                             remaining = remaining.saturating_sub(difference);
                         }
@@ -392,14 +393,12 @@ impl ElementCtx {
             let props = AxisSizes::from_u16vec2(child.props.size, *el.direction)
                 .with_main(entry.size.clamp(0, entry.max_size));
             child.props.size = props.to_u16vec2(*el.direction);
-            tracing::info!(?child.entity, final = ?child.props.size, ?entry.max_size);
         }
 
         for child in el.children.iter() {
             self.calculate_grow_sizes(view, child, false, area)?;
         }
 
-        // tracing::info!(?el.entity, final = ?el.props.size);
         Ok(())
     }
     fn calculate_positions(

@@ -347,6 +347,51 @@ fn test_percentage_01() {
     );
 }
 
+/// tests an edge case where the children of a grow container with non zero gap
+/// next to a percentage container overlap the parent.
+///
+/// Caused by the waterfall algorithm setting the size of the smallest child to
+/// the size of the second smallest child indiscriminately, without clamping the
+/// difference to the remaining space.
+#[test]
+fn test_percentage_03() {
+    let mut ctx = ElementCtx::new();
+    let root = ui! {
+        <Block .rounded .title_top="root" Width::grow() Height::grow() Direction::Horizontal Gap(1)>
+            <Block .rounded .title_top="#1.0" Width::percentage(25) Height::grow() Center>
+                "25%"
+            </Block>
+            <Block .rounded Width::grow() Height::grow() Direction::Horizontal Gap(1)>
+                <Block .rounded .title_top="#2.0" Width::percentage(50) Height::grow()>
+                    "50%"
+                </Block>
+                <Block .rounded .title_top="#2.1" Width::grow() Height::grow()>
+                    "50%"
+                </Block>
+            </Block>
+        </Block>
+    };
+    let root = ctx.spawn_ui(root);
+
+    let mut buf = Buffer::empty(Rect::new(0, 0, 33, 7));
+
+    ctx.calculate_layout(root, buf.area).unwrap();
+    ctx.render(root, buf.area, &mut buf);
+
+    assert_eq!(
+        buf,
+        Buffer::with_lines([
+            "╭root───────────────────────────╮",
+            "│╭#1.0──╮ ╭────────────────────╮│",
+            "││      │ │╭#2.0────╮ ╭#2.1───╮││",
+            "││25%   │ ││50%     │ │50%    │││",
+            "││      │ │╰────────╯ ╰───────╯││",
+            "│╰──────╯ ╰────────────────────╯│",
+            "╰───────────────────────────────╯",
+        ])
+    );
+}
+
 #[test]
 fn test_percentage_02() {
     let mut ctx = ElementCtx::new();
