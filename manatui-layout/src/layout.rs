@@ -285,20 +285,23 @@ impl ElementCtx {
                 );
 
                 // cross axis calculation
-                let cross_axis = child.props.size.cross_axis_mut(*el.direction);
-                let cross_axis_max_size = *(*max_width, *max_height).cross_axis(*el.direction);
-                let cross_axis_inner_size = inner_size_float.cross_axis_mut(*el.direction);
-                let cross_axis_max_size_computed =
-                    cross_axis_max_size.compute_from_parent(cross_axis_inner_size);
-                match cross_axis_max_size_computed {
-                    Some(value) => {
-                        *cross_axis = value;
+                let cross_axis = *(*child.width, *child.height).cross_axis(*el.direction);
+                if cross_axis.is_grow() {
+                    let cross_axis = child.props.size.cross_axis_mut(*el.direction);
+                    let cross_axis_max_size = *(*max_width, *max_height).cross_axis(*el.direction);
+                    let cross_axis_inner_size = inner_size_float.cross_axis_mut(*el.direction);
+                    let cross_axis_max_size_computed =
+                        cross_axis_max_size.compute_from_parent(cross_axis_inner_size);
+                    match cross_axis_max_size_computed {
+                        Some(value) => {
+                            *cross_axis = value;
+                        }
+                        None => {
+                            *cross_axis = *cross_axis_inner_size as u16;
+                        }
                     }
-                    None => {
-                        *cross_axis = *cross_axis_inner_size as u16;
-                    }
+                    *cross_axis = (*cross_axis).clamp(0u16, *max_size.cross_axis(*el.direction));
                 }
-                *cross_axis = (*cross_axis).clamp(0u16, *max_size.cross_axis(*el.direction));
 
                 let main_axis = child.props.size.main_axis_mut(*el.direction);
                 let main_axis_size = *(*child.width, *child.height).main_axis(*el.direction);

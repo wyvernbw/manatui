@@ -18,6 +18,38 @@ fn buffer_to_string(buf: &Buffer) -> String {
 }
 
 #[test]
+fn test_fit_01() {
+    let mut ctx = ElementCtx::new();
+    let root = ui! {
+        <Block .rounded .title_top="block" Direction::Horizontal>
+            <Block .rounded/>
+            <Block .rounded>
+                "content"
+            </Block>
+        </Block>
+    };
+    let root = ctx.spawn_ui(root);
+
+    let mut buf = Buffer::empty(Rect::new(0, 0, 28, 7));
+
+    ctx.calculate_layout(root, buf.area).unwrap();
+    ctx.render(root, buf.area, &mut buf);
+
+    assert_eq!(
+        buf,
+        Buffer::with_lines([
+            "╭block──────╮               ",
+            "│╭╮╭───────╮│               ",
+            "│╰╯│content││               ",
+            "│  ╰───────╯│               ",
+            "╰───────────╯               ",
+            "                            ",
+            "                            ",
+        ])
+    );
+}
+
+#[test]
 fn test_grow_02() {
     let mut ctx = ElementCtx::new();
     let block = || Block::bordered().border_type(BorderType::Rounded);
@@ -384,7 +416,7 @@ fn test_percentage_03() {
             "╭root───────────────────────────╮",
             "│╭#1.0──╮ ╭────────────────────╮│",
             "││      │ │╭#2.0────╮ ╭#2.1───╮││",
-            "││25%   │ ││50%     │ │50%    │││",
+            "││ 25%  │ ││50%     │ │50%    │││",
             "││      │ │╰────────╯ ╰───────╯││",
             "│╰──────╯ ╰────────────────────╯│",
             "╰───────────────────────────────╯",
@@ -478,6 +510,55 @@ fn test_max_width_02() {
             "││hello │                  │",
             "│╰──────╯                  │",
             "╰──────────────────────────╯",
+        ])
+    );
+}
+
+#[test]
+fn test_cross_axis_fit() {
+    let mut ctx = ElementCtx::new();
+    let root = ui! {
+        <Block>
+            <Block .rounded>
+                <Block Padding::horizontal(3)>
+                    <Text>"Title"</Text>
+                    <Text>"Subtitle   ^C to quit"</Text>
+                </Block>
+            </Block>
+            <Block Padding::horizontal(5)>
+                <Text>"Select:"</Text>
+                <Text>"item #01"</Text>
+                <Text>"item #02"</Text>
+                <Text>"item #03"</Text>
+                <Block .rounded Width::fit()>" Confirm "</Block>
+                <Text>"↑↓ or J/K to navigate"</Text>
+            </Block>
+        </Block>
+    };
+    let root = ctx.spawn_ui(root);
+
+    let mut buf = Buffer::empty(Rect::new(0, 0, 28, 14));
+
+    ctx.calculate_layout(root, buf.area).unwrap();
+    ctx.render(root, buf.area, &mut buf);
+
+    assert_eq!(
+        buf,
+        Buffer::with_lines([
+            "╭──────────────────────────╮",
+            "│   Title                  │",
+            "│   Subtitle   ^C to quit  │",
+            "╰──────────────────────────╯",
+            "     Select:                ",
+            "     item #01               ",
+            "     item #02               ",
+            "     item #03               ",
+            "     ╭─────────╮            ",
+            "     │ Confirm │            ",
+            "     ╰─────────╯            ",
+            "     ↑↓ or J/K to navigate  ",
+            "                            ",
+            "                            ",
         ])
     );
 }
