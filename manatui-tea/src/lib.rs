@@ -277,6 +277,10 @@ pub async fn run<Msg>(
     update: impl UpdateFn<Msg, Msg::Model>,
     quit_signal: impl SignalFn<Msg, Msg::Model>,
     #[builder(default, name = "with_options")] options: TerminalOptions,
+
+    #[cfg(feature = "crossterm")]
+    #[builder(default)]
+    enable_mouse: bool,
 ) -> Result<(), RuntimeErr>
 where
     Msg: Clone + Message + Component,
@@ -284,8 +288,18 @@ where
     let is_inline = matches!(options.viewport, ratatui::Viewport::Inline(_));
 
     #[cfg(feature = "crossterm")]
-    if !is_inline {
-        _ = crossterm::execute!(stdout(), crossterm::terminal::EnterAlternateScreen);
+    {
+        if !is_inline {
+            _ = crossterm::execute!(stdout(), crossterm::terminal::EnterAlternateScreen);
+        }
+        if enable_mouse {
+            let hook = std::panic::take_hook();
+            std::panic::set_hook(Box::new(move |info| {
+                _ = crossterm::execute!(stdout(), crossterm::event::DisableMouseCapture);
+                hook(info);
+            }));
+            _ = crossterm::execute!(stdout(), crossterm::event::EnableMouseCapture);
+        }
     }
 
     run_in(stdout())
@@ -298,8 +312,13 @@ where
         .await?;
 
     #[cfg(feature = "crossterm")]
-    if !is_inline {
-        _ = crossterm::execute!(stdout(), crossterm::terminal::LeaveAlternateScreen);
+    {
+        if !is_inline {
+            _ = crossterm::execute!(stdout(), crossterm::terminal::LeaveAlternateScreen);
+        }
+        if enable_mouse {
+            _ = crossterm::execute!(stdout(), crossterm::event::DisableMouseCapture);
+        }
     }
 
     Ok(())
