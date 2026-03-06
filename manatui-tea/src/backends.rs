@@ -1,5 +1,6 @@
 use glam::{I16Vec2, U16Vec2};
 use ratatui::prelude::Backend;
+use tokio_stream::StreamExt;
 
 use crate::{Chan, RuntimeMsg};
 
@@ -43,6 +44,22 @@ impl<Msg, W: std::io::Write> MsgStream<Msg, W> {
                     let more_queued = !this.dispatch.1.is_empty();
                     if let Ok(msg) = msg { return RuntimeMsg::App(msg, more_queued) }
                 }
+            }
+        }
+    }
+    pub(crate) async fn try_next(
+        this: &mut Self,
+        fps: std::time::Duration,
+    ) -> Option<RuntimeMsg<Msg>> {
+        tokio::select! {
+            Some(event) = this.event_stream.next() => {
+                event.ok().map(RuntimeMsg::Term)
+            }
+            msg = this.dispatch.1.recv_async() => {
+                msg.ok().map(|msg| RuntimeMsg::App(msg, false))
+            }
+            () = tokio::time::sleep(fps) => {
+                None
             }
         }
     }

@@ -1,5 +1,4 @@
 use std::io::stdout;
-use std::time::Duration;
 
 use crossterm::event::{EnableMouseCapture, Event, KeyEvent, KeyModifiers};
 use manatui_layout::prelude::*;
@@ -38,22 +37,17 @@ enum AppMsg {
     Inc,
     Dec,
     Quit,
-    Wakeup,
 }
 
 impl Message for AppMsg {
     type Model = Model;
 }
 
+impl manatui_tea::Model for Model {}
+
 async fn init() -> (Model, Effect<AppMsg>) {
     _ = crossterm::execute!(stdout(), EnableMouseCapture);
-    (
-        Model::default(),
-        Effect::new(async |tx| {
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            _ = tx.send_async(AppMsg::Wakeup).await;
-        }),
-    )
+    (Model::default(), Effect::none())
 }
 
 #[subview]
@@ -127,13 +121,6 @@ async fn update(model: Model, msg: AppMsg) -> (Model, Effect<AppMsg>) {
         AppMsg::Dec => (
             Model {
                 value: model.value - 1,
-                ..model
-            },
-            Effect::none(),
-        ),
-        AppMsg::Wakeup => (
-            Model {
-                awake: true,
                 ..model
             },
             Effect::none(),

@@ -17,6 +17,7 @@ use manatui_layout::{
 use ratatui::{Terminal, TerminalOptions, prelude::Backend};
 use smallbox::SmallBox;
 use tailcall::tailcall;
+use tokio::time::Instant;
 
 use crate::backends::{DefaultBackend, DefaultEvent, ManaBackend, MsgStream};
 
@@ -86,27 +87,60 @@ pub struct Ctx<B: Backend> {
     terminal: Terminal<B>,
 }
 
+struct RuntimeConfig {
+    fps: std::time::Duration,
+}
+
+pub struct HotLoop;
+
+fn is_hot_loop<B: Backend>(ctx: &Ctx<B>) -> bool {
+    ctx.el_ctx.query::<&HotLoop>().iter().len() != 0
+}
+
 #[tailcall]
+#[bon::builder]
 async fn runtime<Msg: Message, W: std::io::Write>(
-    model: Msg::Model,
+    mut model: Msg::Model,
     view: impl ViewFn<Msg, Msg::Model>,
     update: impl UpdateFn<Msg, Msg::Model>,
     quit_signal: impl SignalFn<Msg, Msg::Model>,
     mut msg_stream: MsgStream<Msg, W>,
     ctx: &mut Ctx<DefaultBackend<W>>,
     prev_root: Option<Element>,
+    config: RuntimeConfig,
 ) -> Result<(), RuntimeErr> {
-    let msg = MsgStream::<Msg, W>::next(&mut msg_stream).await;
+    let now = Instant::now();
+
+    let msg = if is_hot_loop(ctx) {
+        MsgStream::<Msg, W>::try_next(&mut msg_stream, config.fps).await
+    } else {
+        Some(MsgStream::<Msg, W>::next(&mut msg_stream).await)
+    };
+
     match msg {
-        RuntimeMsg::App(msg, _) if quit_signal(&model, &msg) => Ok(()),
-        RuntimeMsg::App(msg, false) => {
+        None => {
+            update_delta_time::<Msg>(&mut model, &now);
+            let prev_root = Some(rerender(ctx, &model, &view, prev_root).await);
+            return runtime(
+                model,
+                view,
+                update,
+                quit_signal,
+                msg_stream,
+                ctx,
+                prev_root,
+                config,
+            );
+        }
+        Some(RuntimeMsg::App(msg, _)) if quit_signal(&model, &msg) => Ok(()),
+
+        Some(RuntimeMsg::App(msg, false)) => {
+            update_delta_time::<Msg>(&mut model, &now);
+
             let (model, mut effect) = update(model, msg).await;
             tokio::spawn(effect.0.run_effect(msg_stream.dispatch.0.clone()));
-            let root = view(&model).await;
-            if let Some(prev) = prev_root {
-                ctx.despawn_ui(prev);
-            }
-            let root = render::<Msg, W>(ctx, root);
+
+            let prev_root = Some(rerender(ctx, &model, &view, prev_root).await);
 
             runtime(
                 model,
@@ -115,17 +149,33 @@ async fn runtime<Msg: Message, W: std::io::Write>(
                 quit_signal,
                 msg_stream,
                 ctx,
-                Some(root),
+                prev_root,
+                config,
             )
         }
-        RuntimeMsg::App(msg, true) => {
+
+        Some(RuntimeMsg::App(msg, true)) => {
             let (model, mut effect) = update(model, msg).await;
             tokio::spawn(effect.0.run_effect(msg_stream.dispatch.0.clone()));
-            runtime(model, view, update, quit_signal, msg_stream, ctx, prev_root)
+
+            runtime(
+                model,
+                view,
+                update,
+                quit_signal,
+                msg_stream,
+                ctx,
+                prev_root,
+                config,
+            )
         }
-        RuntimeMsg::Term(event) => {
+
+        Some(RuntimeMsg::Term(event)) => {
+            update_delta_time::<Msg>(&mut model, &now);
+
             let result = focus::propagate_event::<Msg>(&ctx.el_ctx, &model, &event)
                 .map_err(|_| RuntimeErr::PropagateEventError)?;
+
             if let Some((msg, mut effect)) = result {
                 tokio::spawn(effect.0.run_effect(msg_stream.dispatch.0.clone()));
                 msg_stream
@@ -140,9 +190,36 @@ async fn runtime<Msg: Message, W: std::io::Write>(
                 render::<Msg, W>(ctx, view(&model).await);
             }
 
-            runtime(model, view, update, quit_signal, msg_stream, ctx, prev_root)
+            runtime(
+                model,
+                view,
+                update,
+                quit_signal,
+                msg_stream,
+                ctx,
+                prev_root,
+                config,
+            )
         }
     }
+}
+
+fn update_delta_time<Msg: Message>(model: &mut Msg::Model, now: &Instant) {
+    if let Some(delta) = model.delta_time_mut() {
+        *delta = now.elapsed();
+    }
+}
+
+async fn rerender<Msg: Message, W: std::io::Write>(
+    ctx: &mut Ctx<DefaultBackend<W>>,
+    model: &Msg::Model,
+    view: &impl ViewFn<Msg, Msg::Model>,
+    prev_root: Option<Element>,
+) -> Element {
+    if let Some(prev) = prev_root {
+        ctx.despawn_ui(prev);
+    }
+    render::<Msg, W>(ctx, view(model).await)
 }
 
 fn render<Msg: Message, W: std::io::Write>(
@@ -195,6 +272,7 @@ pub async fn run_in<W, Msg>(
     update: impl UpdateFn<Msg, Msg::Model>,
     quit_signal: impl SignalFn<Msg, Msg::Model>,
     #[builder(default, name = "with_options")] options: TerminalOptions,
+    #[builder(default = std::time::Duration::from_millis(50))] fps: std::time::Duration,
 ) -> Result<(), RuntimeErr>
 where
     Msg: Clone + Message + Component,
@@ -236,16 +314,17 @@ where
     let tree = view(&model).await;
     let root = render::<Msg, W>(&mut ctx, tree);
 
-    runtime(
-        model,
-        view,
-        update,
-        quit_signal,
-        msg_stream,
-        &mut ctx,
-        Some(root),
-    )
-    .await?;
+    runtime()
+        .model(model)
+        .view(view)
+        .update(update)
+        .quit_signal(quit_signal)
+        .msg_stream(msg_stream)
+        .ctx(&mut ctx)
+        .prev_root(root)
+        .config(RuntimeConfig { fps })
+        .call()
+        .await?;
 
     ratatui::restore();
 
@@ -281,6 +360,8 @@ pub async fn run<Msg>(
     #[cfg(feature = "crossterm")]
     #[builder(default)]
     enable_mouse: bool,
+
+    #[builder(default = std::time::Duration::from_millis(50))] fps: std::time::Duration,
 ) -> Result<(), RuntimeErr>
 where
     Msg: Clone + Message + Component,
@@ -308,6 +389,7 @@ where
         .view(view)
         .update(update)
         .quit_signal(quit_signal)
+        .fps(fps)
         .run()
         .await?;
 
@@ -324,6 +406,21 @@ where
     Ok(())
 }
 
+/// Marker trait that must be implemented by Messages in order to tie them to
+/// their model type.
 pub trait Message: Clone + Component {
-    type Model;
+    type Model: Model;
 }
+
+/// Marker trait that must be implemented by Models in order to use certain
+/// extension methods
+pub trait Model {
+    /// The field return will be kept up to date with the delta time,
+    /// i.e. the time between this frame and the last one. Useful for
+    /// hot render loops or animations.
+    fn delta_time_mut(&mut self) -> Option<&mut std::time::Duration> {
+        None
+    }
+}
+
+impl Model for () {}
