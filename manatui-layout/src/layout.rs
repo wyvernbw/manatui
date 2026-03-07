@@ -128,6 +128,32 @@ pub struct ElementCtx {
     #[deref]
     #[deref_mut]
     pub(crate) world: World,
+    pub(crate) node_post_render_systems:
+        Vec<<NodePostRenderSchedule as ElementSchedule>::SchedulePointer>,
+}
+
+/// Marker struct for the `NodePostRender` schedule. Systems in this schedule
+/// run after every node render.
+pub struct NodePostRenderSchedule;
+
+/// System schedule trait
+///
+/// Available schedules:
+/// - [`NodePostRenderSchedule`] runs after every node render.
+pub trait ElementSchedule {
+    /// The type of the system function pointer.
+    type SchedulePointer;
+
+    /// extractor method for the systems collection.
+    fn systems_schedule_mut(ctx: &mut ElementCtx) -> &mut Vec<Self::SchedulePointer>;
+}
+
+impl ElementSchedule for NodePostRenderSchedule {
+    type SchedulePointer = fn(&mut World, Rect, &mut Buffer, Element);
+
+    fn systems_schedule_mut(ctx: &mut ElementCtx) -> &mut Vec<Self::SchedulePointer> {
+        &mut ctx.node_post_render_systems
+    }
 }
 
 impl Ecs for ElementCtx {}
@@ -181,6 +207,13 @@ impl ElementCtx {
     pub fn new() -> Self {
         Self::default()
     }
+
+    /// Adds a system to the specified `S` Schedule. For a list of schedules,
+    /// see [`ElementSchedule`].
+    pub fn add_system<S: ElementSchedule>(&mut self, fn_ptr: S::SchedulePointer) {
+        S::systems_schedule_mut(self).push(fn_ptr);
+    }
+
     fn calculate_fit_sizes(
         &self,
         view: &View<'_, NodeQuery<'_>>,
@@ -585,20 +618,22 @@ impl ElementCtx {
     }
 
     fn render_impl(&mut self, root: Element, area: Rect, buf: &mut Buffer, offset: Offset) {
-        let mut query = self
-            .world
-            .query_one::<(&mut Props, Option<&Children>)>(root);
+        let mut query = self.world.query_one::<(&mut Props, &Children)>(root);
         let (props, children) = query.get().unwrap();
         let area = props.split_area(area, offset);
 
         (props.render)(self, root, area, buf);
-
-        // render children
-
-        let Some(children) = children else { return };
-
         let children = children.clone();
         drop(query);
+        let ElementCtx {
+            world,
+            node_post_render_systems,
+        } = self;
+        for system in node_post_render_systems {
+            system(world, area, buf, root);
+        }
+
+        // render children
 
         if let Ok(mut scrollview) = self.remove_one::<ScrollView>(root) {
             {

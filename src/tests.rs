@@ -2,6 +2,7 @@
 
 use crate::prelude::*;
 use hecs::World;
+use manatui_layout::layout::NodePostRenderSchedule;
 use manatui_macros::subview;
 use manatui_macros::ui;
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Wrap};
@@ -559,6 +560,42 @@ fn test_cross_axis_fit() {
             "     ↑↓ or J/K to navigate  ",
             "                            ",
             "                            ",
+        ])
+    );
+}
+
+#[test]
+fn test_node_post_render_schedule() {
+    let root = ui! {
+        <Block .rounded Width::grow() Height::grow() Direction::Horizontal>
+            <Block .rounded Width::grow() Height::grow()/>
+            <Block .rounded Width::grow() Height::grow()/>
+        </Block>
+    };
+    let area = Rect::new(0, 0, 16, 5);
+    let mut ctx = ElementCtx::new();
+
+    ctx.add_system::<NodePostRenderSchedule>(|_world, area, buf, _element| {
+        Block::bordered()
+            .border_type(BorderType::Double)
+            .render(area, buf);
+    });
+
+    let mut buf = Buffer::empty(area);
+
+    let root = ctx.spawn_ui(root);
+
+    ctx.calculate_layout(root, area).unwrap();
+    ctx.render(root, area, &mut buf);
+
+    assert_eq!(
+        buf,
+        Buffer::with_lines([
+            "╔══════════════╗",
+            "║╔═════╗╔═════╗║",
+            "║║     ║║     ║║",
+            "║╚═════╝╚═════╝║",
+            "╚══════════════╝",
         ])
     );
 }
