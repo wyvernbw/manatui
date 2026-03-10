@@ -244,6 +244,7 @@ impl ElementCtx {
         space_used = space_used.pad(*el.padding, *el.direction);
         space_used.main_axis += gap_space;
         let space_used = space_used.to_u16vec2(*el.direction);
+        let space_used = space_used.max(el.props.size);
 
         let size = u16vec2(
             *el.width.as_fixed().unwrap_or(&space_used.x),

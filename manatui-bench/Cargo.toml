@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-manatui = { version = "0.0.3", path = "..", features = ["macros", "nightly"] }
+manatui = { version = "0.0.4", path = "..", features = ["macros", "nightly"] }
 criterion = "0.8.2"
 gungraun = "0.17.2"
 test-log = { version = "0.2.19", features = ["trace"] }
