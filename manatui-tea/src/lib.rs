@@ -5,7 +5,7 @@ pub mod backends;
 #[path = "./focus/focus.rs"]
 pub mod focus;
 
-use std::io::stdout;
+use std::{io::stdout, time::Duration};
 
 use crossterm::terminal::enable_raw_mode;
 use flume::{Receiver, Sender};
@@ -91,6 +91,13 @@ struct RuntimeConfig {
     fps: std::time::Duration,
 }
 
+/// # `HotLoop`
+///
+/// Marker Component.
+///
+/// While in the tree, the manatui runtime will run in a hot loop instead of
+/// sleeping in between events. This should only be used for things like throbbers
+/// or animating components that require frequent rerenders.
 pub struct HotLoop;
 
 fn is_hot_loop<B: Backend>(ctx: &Ctx<B>) -> bool {
@@ -120,6 +127,7 @@ async fn runtime<Msg: Message, W: std::io::Write>(
     match msg {
         None => {
             update_delta_time::<Msg>(&mut model, &now);
+            let model = model.on_render();
             let prev_root = Some(rerender(ctx, &model, &view, prev_root).await);
             return runtime(
                 model,
@@ -136,6 +144,7 @@ async fn runtime<Msg: Message, W: std::io::Write>(
 
         Some(RuntimeMsg::App(msg, false)) => {
             update_delta_time::<Msg>(&mut model, &now);
+            let model = model.on_render();
 
             let (model, mut effect) = update(model, msg).await;
             tokio::spawn(effect.0.run_effect(msg_stream.dispatch.0.clone()));
@@ -172,6 +181,7 @@ async fn runtime<Msg: Message, W: std::io::Write>(
 
         Some(RuntimeMsg::Term(event)) => {
             update_delta_time::<Msg>(&mut model, &now);
+            let model = model.on_render();
 
             let result = focus::propagate_event::<Msg>(&ctx.el_ctx, &model, &event)
                 .map_err(|_| RuntimeErr::PropagateEventError)?;
@@ -414,12 +424,18 @@ pub trait Message: Clone + Component {
 
 /// Marker trait that must be implemented by Models in order to use certain
 /// extension methods
-pub trait Model {
+pub trait Model: Sized {
     /// The field return will be kept up to date with the delta time,
     /// i.e. the time between this frame and the last one. Useful for
     /// hot render loops or animations.
     fn delta_time_mut(&mut self) -> Option<&mut std::time::Duration> {
         None
+    }
+    /// Function that runs before every render and allows updating the model.
+    /// This is mainly useful for updating animations of [`HotLoop`] components.
+    #[must_use]
+    fn on_render(self) -> Self {
+        self
     }
 }
 
