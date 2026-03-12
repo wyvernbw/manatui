@@ -1,4 +1,5 @@
 use std::io::stdout;
+use std::time::Duration;
 
 use crossterm::event::{EnableMouseCapture, Event, KeyEvent, KeyModifiers};
 use manatui_layout::prelude::*;
@@ -37,6 +38,7 @@ enum AppMsg {
     Inc,
     Dec,
     Quit,
+    Wake,
 }
 
 impl Message for AppMsg {
@@ -47,7 +49,13 @@ impl manatui_tea::Model for Model {}
 
 async fn init() -> (Model, Effect<AppMsg>) {
     _ = crossterm::execute!(stdout(), EnableMouseCapture);
-    (Model::default(), Effect::none())
+    (
+        Model::default(),
+        Effect::new(async |tx| {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            _ = tx.send_async(AppMsg::Wake).await;
+        }),
+    )
 }
 
 #[subview]
@@ -55,7 +63,11 @@ fn my_button<Marker: 'static>(keybind: KeyEvent, msg: AppMsg, tooltip: &'static 
     ui! {
         <Block
             .rounded .title_bottom={tooltip}.title_alignment={ratatui::layout::HorizontalAlignment::Center}
-            FocusTarget::new::<Marker>()
+            // This is only to illustrate that you can use a dynamic key for focus,
+            // since we use Marker types here anyways it would be better to just use `new`
+            FocusTarget::new_dyn(std::any::type_name::<Marker>())
+            // FocusTarget::new::<Marker>()
+
             FocusStyle(Style::new().green())
             Width::fixed(5) Center
             ClickOnEnter
@@ -121,6 +133,13 @@ async fn update(model: Model, msg: AppMsg) -> (Model, Effect<AppMsg>) {
         AppMsg::Dec => (
             Model {
                 value: model.value - 1,
+                ..model
+            },
+            Effect::none(),
+        ),
+        AppMsg::Wake => (
+            Model {
+                awake: true,
                 ..model
             },
             Effect::none(),

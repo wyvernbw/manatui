@@ -4,6 +4,8 @@
 pub mod backends;
 #[path = "./focus/focus.rs"]
 pub mod focus;
+#[cfg(feature = "tachyonfx")]
+pub mod fx;
 
 use std::{io::stdout, time::Duration};
 
@@ -104,10 +106,22 @@ fn is_hot_loop<B: Backend>(ctx: &Ctx<B>) -> bool {
     ctx.el_ctx.query::<&HotLoop>().iter().len() != 0
 }
 
+macro_rules! advance_delta {
+    ($ctx:expr, $model:expr, $now:expr) => {
+        #[cfg_attr(not(feature = "tachyonfx"), expect(unused_variables))]
+        let dt = update_delta_time::<Msg>($model, $now);
+
+        #[cfg(feature = "tachyonfx")]
+        if let Some(dt) = dt {
+            $ctx.advance_fx(dt);
+        }
+    };
+}
+
 #[tailcall]
 #[bon::builder]
 async fn runtime<Msg: Message, W: std::io::Write>(
-    mut model: Msg::Model,
+    model: Msg::Model,
     view: impl ViewFn<Msg, Msg::Model>,
     update: impl UpdateFn<Msg, Msg::Model>,
     quit_signal: impl SignalFn<Msg, Msg::Model>,
@@ -126,8 +140,8 @@ async fn runtime<Msg: Message, W: std::io::Write>(
 
     match msg {
         None => {
-            update_delta_time::<Msg>(&mut model, &now);
-            let model = model.on_render();
+            let mut model = model.on_render();
+            advance_delta!(ctx, &mut model, &now);
             let prev_root = Some(rerender(ctx, &model, &view, prev_root).await);
             return runtime(
                 model,
@@ -143,9 +157,8 @@ async fn runtime<Msg: Message, W: std::io::Write>(
         Some(RuntimeMsg::App(msg, _)) if quit_signal(&model, &msg) => Ok(()),
 
         Some(RuntimeMsg::App(msg, false)) => {
-            update_delta_time::<Msg>(&mut model, &now);
-            let model = model.on_render();
-
+            let mut model = model.on_render();
+            advance_delta!(ctx, &mut model, &now);
             let (model, mut effect) = update(model, msg).await;
             tokio::spawn(effect.0.run_effect(msg_stream.dispatch.0.clone()));
 
@@ -180,9 +193,8 @@ async fn runtime<Msg: Message, W: std::io::Write>(
         }
 
         Some(RuntimeMsg::Term(event)) => {
-            update_delta_time::<Msg>(&mut model, &now);
-            let model = model.on_render();
-
+            let mut model = model.on_render();
+            advance_delta!(ctx, &mut model, &now);
             let result = focus::propagate_event::<Msg>(&ctx.el_ctx, &model, &event)
                 .map_err(|_| RuntimeErr::PropagateEventError)?;
 
@@ -214,9 +226,12 @@ async fn runtime<Msg: Message, W: std::io::Write>(
     }
 }
 
-fn update_delta_time<Msg: Message>(model: &mut Msg::Model, now: &Instant) {
+fn update_delta_time<Msg: Message>(model: &mut Msg::Model, now: &Instant) -> Option<Duration> {
     if let Some(delta) = model.delta_time_mut() {
         *delta = now.elapsed();
+        Some(*delta)
+    } else {
+        None
     }
 }
 
@@ -313,6 +328,11 @@ where
         el_ctx: manatui_layout::prelude::ElementCtx::new(),
         terminal,
     };
+
+    #[cfg(feature = "tachyonfx")]
+    {
+        ctx.setup_fx();
+    }
 
     let mut cursor_pos = ctx
         .terminal

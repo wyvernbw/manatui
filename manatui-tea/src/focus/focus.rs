@@ -1,6 +1,11 @@
 pub mod handlers;
 
-use std::{any::TypeId, ops::Index};
+use std::{
+    any::TypeId,
+    collections::HashMap,
+    hash::{BuildHasherDefault, DefaultHasher, Hash, Hasher},
+    ops::Index,
+};
 
 use anyhow::anyhow;
 use hecs::{Entity, Or, TypeIdMap, World};
@@ -53,10 +58,42 @@ pub struct NavGroup {
     elements: Vector<Entity>,
 }
 
+type FocusMap = HashMap<u128, UiIndex, BuildHasherDefault<NoOpHasher>>;
+
+#[derive(Default)]
+struct NoOpHasher {
+    hash: u64,
+}
+
+/// Adapted from [`hecs`].
+impl Hasher for NoOpHasher {
+    fn finish(&self) -> u64 {
+        self.hash
+    }
+
+    fn write_u64(&mut self, n: u64) {
+        // Only a single value can be hashed, so the old hash should be zero.
+        debug_assert_eq!(self.hash, 0);
+        self.hash = n;
+    }
+
+    // Tolerate TypeId being either u64 or u128.
+    fn write_u128(&mut self, n: u128) {
+        debug_assert_eq!(self.hash, 0);
+        self.hash = n as u64;
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        let mut hasher = DefaultHasher::new();
+        hasher.write(bytes);
+        self.hash = hasher.finish();
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct UiStack {
     stack: Vector<NavGroup>,
-    focus_map: TypeIdMap<UiIndex>,
+    focus_map: FocusMap,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -78,7 +115,7 @@ impl UiStack {
 
 pub(crate) fn generate_ui_stack(world: &mut World, root: Entity) {
     let mut stack = Vector::new();
-    let mut focus_map = TypeIdMap::default();
+    let mut focus_map = FocusMap::default();
     let last_group =
         generate_ui_stack_impl(world, root, &mut stack, &mut focus_map, NavGroup::default());
     if !last_group.elements.is_empty() {
@@ -92,7 +129,7 @@ pub(crate) fn generate_ui_stack_impl(
     world: &World,
     root: Entity,
     stack: &mut Vector<NavGroup>,
-    focus_map: &mut TypeIdMap<UiIndex>,
+    focus_map: &mut FocusMap,
     mut current_group: NavGroup,
 ) -> NavGroup {
     current_group.elements.push_back(root);
@@ -110,7 +147,7 @@ pub(crate) fn generate_ui_stack_impl(
 
     if let Some(focus_target) = focus_target {
         focus_map.insert(
-            focus_target.0,
+            focus_target.as_hash(),
             UiIndex(stack.len(), current_group.elements.len() - 1),
         );
     }
@@ -130,7 +167,23 @@ pub(crate) fn generate_ui_stack_impl(
 
 #[must_use]
 #[derive(Debug, Clone, Copy)]
-pub struct FocusTarget(TypeId);
+pub enum FocusTarget {
+    Static(TypeId),
+    Dynamic(u128),
+}
+
+impl FocusTarget {
+    #[inline(always)]
+    const fn as_hash(&self) -> u128 {
+        match self {
+            FocusTarget::Static(type_id) => unsafe {
+                // SAFETY: [`TypeId`] is just a `u128` hash
+                std::mem::transmute::<TypeId, u128>(*type_id)
+            },
+            FocusTarget::Dynamic(value) => *value,
+        }
+    }
+}
 
 #[must_use]
 #[derive(Debug, Clone, Copy)]
@@ -138,7 +191,12 @@ pub struct FocusPopup;
 
 impl FocusTarget {
     pub fn new<T: 'static>() -> Self {
-        Self(TypeId::of::<T>())
+        Self::Static(TypeId::of::<T>())
+    }
+    pub fn new_dyn<T: Hash + ?Sized>(value: &T) -> Self {
+        let mut hasher = DefaultHasher::new();
+        value.hash(&mut hasher);
+        Self::Dynamic(u128::from(hasher.finish()))
     }
 }
 
@@ -152,7 +210,7 @@ pub(crate) fn init_focus_system(world: &mut World) {
         let mut ctx = FocusContext { stack: Vec::new() };
         if let Some(entity) = first_focus {
             if let Ok(target) = world.get::<&FocusTarget>(entity) {
-                ctx.push(target.0);
+                ctx.push(target.as_hash());
             }
         }
         ctx
@@ -351,7 +409,7 @@ pub(crate) fn navigation_system<B: ManaBackend>(
                 .iter()
                 .find_map(|&entity| match query.get(entity) {
                     Some((props, focus_target)) => {
-                        if focus_target.0 == current {
+                        if focus_target.as_hash() == current {
                             return None;
                         }
 
@@ -359,7 +417,7 @@ pub(crate) fn navigation_system<B: ManaBackend>(
                         let to_node = to_node.normalize_or_zero();
                         let pointing_towards = to_node.dot(direction);
                         if (0.5..=1.0).contains(&pointing_towards) {
-                            Some(focus_target.0)
+                            Some(focus_target.as_hash())
                         } else {
                             None
                         }
@@ -370,7 +428,8 @@ pub(crate) fn navigation_system<B: ManaBackend>(
             if let Some(next_node_id) = next_node {
                 drop(focus_ctx);
                 let mut focus_ctx = world.get_resource::<&mut FocusContext>()?;
-                focus_ctx.focus_on_value(next_node_id);
+                focus_ctx.pop();
+                focus_ctx.push(next_node_id);
             }
         }
     }
@@ -385,40 +444,31 @@ pub(crate) fn try_grab_focus(world: &World, entity: Entity) -> anyhow::Result<()
 
     let mut focus_ctx = world.get_resource::<&mut FocusContext>()?;
     if popup {
-        if focus_ctx.top() != Some(focus_target.0) {
-            focus_ctx.push(focus_target.0);
+        if focus_ctx.top() != Some(focus_target.as_hash()) {
+            focus_ctx.push(focus_target.as_hash());
         }
     } else {
-        focus_ctx.focus_on_value(focus_target.0);
+        focus_ctx.pop();
+        focus_ctx.push(focus_target.as_hash());
     }
 
     Ok(())
 }
 
 pub(crate) struct FocusContext {
-    stack: Vec<TypeId>,
+    stack: Vec<u128>,
 }
 
 impl FocusContext {
-    fn top(&self) -> Option<TypeId> {
+    fn top(&self) -> Option<u128> {
         self.stack.last().copied()
     }
-    fn push(&mut self, value: TypeId) {
+    fn push(&mut self, value: u128) {
         self.stack.push(value);
     }
 
-    fn pop(&mut self) -> Option<TypeId> {
+    fn pop(&mut self) -> Option<u128> {
         self.stack.pop()
-    }
-
-    fn focus_on<T: 'static>(&mut self) {
-        self.pop();
-        self.push(TypeId::of::<T>());
-    }
-
-    fn focus_on_value(&mut self, value: TypeId) {
-        self.pop();
-        self.push(value);
     }
 }
 
