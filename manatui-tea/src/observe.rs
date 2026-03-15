@@ -22,4 +22,9 @@ impl AreaRef {
     pub fn empty() -> Self {
         Self::default()
     }
+    #[must_use]
+    pub fn contains(&self, x: u16, y: u16) -> bool {
+        self.get()
+            .is_some_and(|rect| rect.contains(ratatui::layout::Position { x, y }))
+    }
 }
