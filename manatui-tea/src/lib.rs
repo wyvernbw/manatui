@@ -6,6 +6,7 @@ pub mod backends;
 pub mod focus;
 #[cfg(feature = "tachyonfx")]
 pub mod fx;
+pub mod observe;
 
 use std::{io::stdout, time::Duration};
 
@@ -13,15 +14,18 @@ use crossterm::terminal::enable_raw_mode;
 use flume::{Receiver, Sender};
 use hecs::Component;
 use manatui_layout::{
-    layout::{Element, ElementCtx},
+    layout::{Element, ElementCtx, NodePostRenderSchedule, PostRenderSchedule, Props},
     ui::View,
 };
-use ratatui::{Terminal, TerminalOptions, prelude::Backend};
+use ratatui::{Terminal, TerminalOptions, layout::Rect, prelude::Backend};
 use smallbox::SmallBox;
 use tailcall::tailcall;
 use tokio::time::Instant;
 
-use crate::backends::{DefaultBackend, DefaultEvent, ManaBackend, MsgStream};
+use crate::{
+    backends::{DefaultBackend, DefaultEvent, ManaBackend, MsgStream},
+    observe::AreaRef,
+};
 
 pub type Chan<Msg> = (Sender<Msg>, Receiver<Msg>);
 pub trait UpdateFn<Msg, Model> = AsyncFn(Model, Msg) -> (Model, Effect<Msg>) + Component;
@@ -354,6 +358,16 @@ where
     {
         ctx.setup_fx();
     }
+    ctx.add_system::<PostRenderSchedule>(|world, _, _| {
+        for (props, area_ref) in world.query_mut::<(&Props, &AreaRef)>() {
+            area_ref.set(ratatui::layout::Rect {
+                x: props.position.x,
+                y: props.position.y,
+                width: props.size.x,
+                height: props.size.y,
+            });
+        }
+    });
 
     let mut cursor_pos = ctx
         .terminal

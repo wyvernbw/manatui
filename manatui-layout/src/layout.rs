@@ -129,6 +129,7 @@ pub struct ElementCtx {
     pub(crate) world: World,
     pub(crate) node_post_render_systems:
         Vec<<NodePostRenderSchedule as ElementSchedule>::SchedulePointer>,
+    pub(crate) post_render_systems: Vec<<PostRenderSchedule as ElementSchedule>::SchedulePointer>,
 }
 
 /// Marker struct for the `NodePostRender` schedule. Systems in this schedule
@@ -152,6 +153,18 @@ impl ElementSchedule for NodePostRenderSchedule {
 
     fn systems_schedule_mut(ctx: &mut ElementCtx) -> &mut Vec<Self::SchedulePointer> {
         &mut ctx.node_post_render_systems
+    }
+}
+
+/// Marker struct for the `PostRender` schedule. Systems in this schedule
+/// run only once after the render has completed.
+pub struct PostRenderSchedule;
+
+impl ElementSchedule for PostRenderSchedule {
+    type SchedulePointer = fn(&mut World, Rect, &mut Buffer);
+
+    fn systems_schedule_mut(ctx: &mut ElementCtx) -> &mut Vec<Self::SchedulePointer> {
+        &mut ctx.post_render_systems
     }
 }
 
@@ -633,6 +646,14 @@ impl ElementCtx {
     pub fn render(&mut self, root: Element, area: Rect, buf: &mut Buffer) {
         // render self
         self.render_impl(root, area, buf, Offset { x: 0, y: 0 });
+        let ElementCtx {
+            world,
+            node_post_render_systems: _,
+            post_render_systems,
+        } = self;
+        for system in post_render_systems {
+            system(world, area, buf)
+        }
     }
 
     fn render_impl(&mut self, root: Element, area: Rect, buf: &mut Buffer, offset: Offset) {
@@ -646,6 +667,7 @@ impl ElementCtx {
         let ElementCtx {
             world,
             node_post_render_systems,
+            post_render_systems: _,
         } = self;
         for system in node_post_render_systems {
             system(world, area, buf, root);
