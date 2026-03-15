@@ -47,7 +47,7 @@ where
 }
 pub struct Effect<Msg>(SmallBox<dyn EffectFn<Msg>, [usize; 4]>);
 
-impl<Msg: Send + Sync + 'static> Effect<Msg> {
+impl<Msg: Clone + Send + Sync + 'static> Effect<Msg> {
     #[must_use]
     pub fn none() -> Self {
         Self::new(async move |_| {})
@@ -59,6 +59,15 @@ impl<Msg: Send + Sync + 'static> Effect<Msg> {
         f: F,
     ) -> Self {
         Self(SmallBox::new(f) as _)
+    }
+
+    pub fn msg(msg: Msg) -> Self {
+        Effect::new(move |tx| {
+            let msg = msg.clone();
+            async move {
+                _ = tx.send_async(msg).await;
+            }
+        })
     }
 }
 
