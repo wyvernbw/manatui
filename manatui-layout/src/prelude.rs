@@ -10,7 +10,7 @@ pub use crate::layout::TuiElMarker;
 
 pub use crate::layout::{
     Children, CrossJustify, ElWidget, Element, ElementCtx, Gap, Height, MainJustify, MaxHeight,
-    MaxWidth, Size, Width,
+    MaxWidth, Position, Size, Value, Width,
 };
 pub use ratatui::{
     layout::Direction,

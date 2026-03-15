@@ -8,7 +8,7 @@ use std::{
 };
 
 use derive_more as d;
-use glam::{U16Vec2, Vec2, Vec2Swizzles, u16vec2};
+use glam::{I16Vec2, U16Vec2, Vec2, i16vec2, u16vec2};
 use hecs::{CommandBuffer, Component, ComponentError, Entity, View, World};
 use manatui_utils::{Ecs, EcsMut};
 use ratatui::{
@@ -18,7 +18,6 @@ use ratatui::{
     widgets::{Padding, Widget},
 };
 use ratatui::{layout::Offset, widgets::StatefulWidget};
-use tracing::instrument;
 pub use tui_scrollview::{ScrollView, ScrollViewState};
 
 /// trait for rendering elements through a shared reference. this is automatically implemented
@@ -167,6 +166,8 @@ struct NodeQuery<'a> {
     padding: &'a Padding,
     children: &'a Children,
     direction: &'a Direction,
+    position: &'a Position,
+    offset: Option<&'a Offset>,
     gap: &'a Gap,
     main_justify: &'a MainJustify,
     cross_justify: &'a CrossJustify,
@@ -442,6 +443,7 @@ impl ElementCtx {
         &self,
         view: &View<NodeQuery>,
         root: Element,
+        area: Rect,
     ) -> Result<(), ComponentError> {
         let el = extract!(view, root)?;
         let children = el.children.clone();
@@ -541,35 +543,50 @@ impl ElementCtx {
                             .ok_or(ComponentError::NoSuchEntity)?
                     };
                     let child_props = child.props;
-                    child_props.position = el.props.position;
-                    match el.direction {
-                        Direction::Horizontal => child_props.position.x += align.start,
-                        Direction::Vertical => child_props.position.y += align.start,
+                    match child.position {
+                        Position::Auto => {
+                            child_props.position = el.props.position;
+                            match el.direction {
+                                Direction::Horizontal => child_props.position.x += align.start,
+                                Direction::Vertical => child_props.position.y += align.start,
+                            }
+                            child_props.position += u16vec2(el.padding.left, el.padding.top);
+                            align.start =
+                                increase_axis(align.start, *el.direction, child_props.size);
+                            match (el.cross_justify, el.direction) {
+                                (CrossJustify::Start, _) => {}
+                                (CrossJustify::Center, Direction::Horizontal) => {
+                                    child_props.position.y +=
+                                        inner_size.y.saturating_sub(child_props.size.y).div(2);
+                                }
+                                (CrossJustify::Center, Direction::Vertical) => {
+                                    child_props.position.x +=
+                                        inner_size.x.saturating_sub(child_props.size.x).div(2);
+                                }
+                                (CrossJustify::End, Direction::Horizontal) => {
+                                    child_props.position.y +=
+                                        inner_size.y.saturating_sub(child_props.size.y);
+                                }
+                                (CrossJustify::End, Direction::Vertical) => {
+                                    child_props.position.x +=
+                                        inner_size.x.saturating_sub(child_props.size.x);
+                                }
+                            }
+                            align.start += **el.gap + align.inbetween + align.tick_rem();
+                        }
+                        Position::Absolute(x, y) => {
+                            let x = x.compute(area.width);
+                            let y = y.compute(area.height);
+                            child_props.position = u16vec2(x, y);
+                        }
                     }
-                    child_props.position += u16vec2(el.padding.left, el.padding.top);
-                    align.start = increase_axis(align.start, *el.direction, child_props.size);
-                    match (el.cross_justify, el.direction) {
-                        (CrossJustify::Start, _) => {}
-                        (CrossJustify::Center, Direction::Horizontal) => {
-                            child_props.position.y +=
-                                inner_size.y.saturating_sub(child_props.size.y).div(2);
-                        }
-                        (CrossJustify::Center, Direction::Vertical) => {
-                            child_props.position.x +=
-                                inner_size.x.saturating_sub(child_props.size.x).div(2);
-                        }
-                        (CrossJustify::End, Direction::Horizontal) => {
-                            child_props.position.y +=
-                                inner_size.y.saturating_sub(child_props.size.y);
-                        }
-                        (CrossJustify::End, Direction::Vertical) => {
-                            child_props.position.x +=
-                                inner_size.x.saturating_sub(child_props.size.x);
-                        }
+                    if let Some(offset) = child.offset {
+                        child_props.position = child_props
+                            .position
+                            .saturating_add_signed(i16vec2(offset.x as i16, offset.y as i16));
                     }
-                    align.start += **el.gap + align.inbetween + align.tick_rem();
                 }
-                self.calculate_positions(view, child)?;
+                self.calculate_positions(view, child, area)?;
                 Ok(())
             })?;
 
@@ -594,7 +611,7 @@ impl ElementCtx {
             let view = query.view();
             self.calculate_fit_sizes(&view, element)?;
             self.calculate_grow_sizes(&view, element, true, area)?;
-            self.calculate_positions(&view, element)?;
+            self.calculate_positions(&view, element, area)?;
         }
         self.layout_postprocess();
         Ok(())
@@ -1124,6 +1141,34 @@ pub enum CrossJustify {
     Center,
     /// aligns the items toward the end of the container.
     End,
+}
+
+/// defines the position strategy for an element.
+#[derive(Default, Clone, Copy, Debug)]
+pub enum Position {
+    /// default auto positioning defined by an element's [`MainJustify`] and [`CrossJustify`].
+    #[default]
+    Auto,
+    /// absolute coordinates in terminal screen space.
+    Absolute(Value, Value),
+}
+
+/// an amount of cells on the terminal grid
+#[derive(Clone, Copy, Debug)]
+pub enum Value {
+    /// a fixed amount of cells.
+    Cells(u16),
+    /// a percentage of the container. This means a percentage of the screen for [`Position::Absolute`].
+    Percentage(u16),
+}
+
+impl Value {
+    const fn compute(self, container: u16) -> u16 {
+        match self {
+            Value::Cells(value) => value,
+            Value::Percentage(p) => (container * p / 100).saturating_sub(1),
+        }
+    }
 }
 
 pub(crate) trait ManaComponent {

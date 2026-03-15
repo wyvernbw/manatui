@@ -38,7 +38,7 @@ use tracing::{Level, enabled, instrument};
 
 use crate::layout::{
     Center, Children, CrossJustify, ElWidget, Element, ElementCtx, Gap, Height, MainJustify,
-    ManaComponent, Props, Size, TuiElMarker, Width,
+    ManaComponent, Position, Props, Size, TuiElMarker, Width,
 };
 
 /// create a ui element.
@@ -561,6 +561,9 @@ fn process_ui_system(world: &mut ElementCtx) {
         }
         if !entity.has::<Children>() {
             buffer.insert_one(node, Children::None);
+        }
+        if !entity.has::<Position>() {
+            buffer.insert_one(node, Position::Auto);
         }
     }
     drop(query);

@@ -5,6 +5,7 @@ use hecs::World;
 use manatui_layout::layout::NodePostRenderSchedule;
 use manatui_macros::subview;
 use manatui_macros::ui;
+use ratatui::layout::Offset;
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Wrap};
 use strum::IntoEnumIterator;
 
@@ -596,6 +597,85 @@ fn test_node_post_render_schedule() {
             "║║     ║║     ║║",
             "║╚═════╝╚═════╝║",
             "╚══════════════╝",
+        ])
+    );
+}
+
+#[test]
+fn test_position_absolute_01() {
+    let mut ctx = ElementCtx::new();
+    let root = ui! {
+        <Block Width::grow() Height::grow() Padding::uniform(3)>
+            <Block .rounded Position::Absolute(Value::Cells(1), Value::Percentage(50))>
+                "(1, 50%)"
+            </Block>
+        </Block>
+    };
+    let root = ctx.spawn_ui(root);
+
+    let mut buf = Buffer::empty(Rect::new(0, 0, 28, 14));
+
+    ctx.calculate_layout(root, buf.area).unwrap();
+    ctx.render(root, buf.area, &mut buf);
+
+    assert_eq!(
+        buf,
+        Buffer::with_lines([
+            "                            ",
+            "                            ",
+            "                            ",
+            "                            ",
+            "                            ",
+            "                            ",
+            " ╭────────╮                 ",
+            " │(1, 50%)│                 ",
+            " ╰────────╯                 ",
+            "                            ",
+            "                            ",
+            "                            ",
+            "                            ",
+            "                            ",
+        ])
+    );
+}
+
+#[test]
+fn test_position_absolute_02() {
+    let mut ctx = ElementCtx::new();
+    let root = ui! {
+        <Block Width::grow() Height::grow() Padding::uniform(3)>
+            <Block .rounded .title="(+3, +3)"
+                Position::Absolute(Value::Cells(1), Value::Percentage(50))
+                Offset::new(3, 3)
+            >
+                "(1, 50%)"
+            </Block>
+        </Block>
+    };
+    let root = ctx.spawn_ui(root);
+
+    let mut buf = Buffer::empty(Rect::new(0, 0, 28, 14));
+
+    ctx.calculate_layout(root, buf.area).unwrap();
+    ctx.render(root, buf.area, &mut buf);
+
+    assert_eq!(
+        buf,
+        Buffer::with_lines([
+            "                            ",
+            "                            ",
+            "                            ",
+            "                            ",
+            "                            ",
+            "                            ",
+            "                            ",
+            "                            ",
+            "                            ",
+            "    ╭(+3, +3)╮              ",
+            "    │(1, 50%)│              ",
+            "    ╰────────╯              ",
+            "                            ",
+            "                            ",
         ])
     );
 }
