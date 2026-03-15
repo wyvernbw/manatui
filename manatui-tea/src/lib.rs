@@ -129,6 +129,7 @@ async fn runtime<Msg: Message, W: std::io::Write>(
     ctx: &mut Ctx<DefaultBackend<W>>,
     prev_root: Option<Element>,
     config: RuntimeConfig,
+    event_msg: Option<impl Fn(DefaultEvent) -> Msg>,
 ) -> Result<(), RuntimeErr> {
     let now = Instant::now();
 
@@ -152,6 +153,7 @@ async fn runtime<Msg: Message, W: std::io::Write>(
                 ctx,
                 prev_root,
                 config,
+                event_msg,
             );
         }
         Some(RuntimeMsg::App(msg, _)) if quit_signal(&model, &msg) => Ok(()),
@@ -173,6 +175,7 @@ async fn runtime<Msg: Message, W: std::io::Write>(
                 ctx,
                 prev_root,
                 config,
+                event_msg,
             )
         }
 
@@ -189,10 +192,17 @@ async fn runtime<Msg: Message, W: std::io::Write>(
                 ctx,
                 prev_root,
                 config,
+                event_msg,
             )
         }
 
         Some(RuntimeMsg::Term(event)) => {
+            let (model, mut effect) = match event_msg {
+                Some(ref event_msg) => update(model, event_msg(event.clone())).await,
+                None => (model, Effect::none()),
+            };
+            tokio::spawn(effect.0.run_effect(msg_stream.dispatch.0.clone()));
+
             let mut model = model.on_render();
             advance_delta!(ctx, &mut model, &now);
             let result = focus::propagate_event::<Msg>(&ctx.el_ctx, &model, &event)
@@ -221,6 +231,7 @@ async fn runtime<Msg: Message, W: std::io::Write>(
                 ctx,
                 prev_root,
                 config,
+                event_msg,
             )
         }
     }
@@ -298,6 +309,7 @@ pub async fn run_in<W, Msg>(
     quit_signal: impl SignalFn<Msg, Msg::Model>,
     #[builder(default, name = "with_options")] options: TerminalOptions,
     #[builder(default = std::time::Duration::from_millis(50))] fps: std::time::Duration,
+    event_msg: Option<impl Fn(DefaultEvent) -> Msg>,
 ) -> Result<(), RuntimeErr>
 where
     Msg: Clone + Message + Component,
@@ -353,6 +365,7 @@ where
         .ctx(&mut ctx)
         .prev_root(root)
         .config(RuntimeConfig { fps })
+        .maybe_event_msg(event_msg)
         .call()
         .await?;
 
@@ -392,6 +405,8 @@ pub async fn run<Msg>(
     enable_mouse: bool,
 
     #[builder(default = std::time::Duration::from_millis(50))] fps: std::time::Duration,
+
+    event_msg: Option<impl Fn(DefaultEvent) -> Msg>,
 ) -> Result<(), RuntimeErr>
 where
     Msg: Clone + Message + Component,
@@ -420,6 +435,7 @@ where
         .update(update)
         .quit_signal(quit_signal)
         .fps(fps)
+        .maybe_event_msg(event_msg)
         .run()
         .await?;
 
