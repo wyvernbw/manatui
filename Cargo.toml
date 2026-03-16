@@ -33,7 +33,9 @@ members = [
     "manatui-layout",
     "manatui-macros",
     "manatui-utils",
-    "manatui-tea", "manatui-bench", "xtask",
+    "manatui-tea",
+    "manatui-bench",
+    "xtask",
 ]
 resolver = "3"
 
