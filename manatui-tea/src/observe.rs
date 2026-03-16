@@ -7,6 +7,8 @@ use manatui_layout::layout::{Children, Element, Props};
 use ratatui::layout::Rect;
 use tailcall::tailcall;
 
+use crate::{Ctx, backends::ManaBackend};
+
 #[derive(Default, Clone, Debug)]
 pub struct AreaRef(Arc<AtomicCell<Option<Rect>>>);
 
@@ -100,6 +102,12 @@ impl HitTest {
         let children = children.clone();
         for entity in children.iter() {
             Self::hit_test(query, *entity, mouse_event);
+        }
+    }
+    pub(crate) fn clear(ctx: &mut Ctx<impl ManaBackend>) {
+        let query = ctx.query_mut::<&HitTest>();
+        for hit_test in query {
+            hit_test.set(HitEvent::None);
         }
     }
 }

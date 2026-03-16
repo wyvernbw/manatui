@@ -215,6 +215,8 @@ async fn runtime<Msg: Message, W: std::io::Write>(
                 let mut query = ctx.query();
                 let view = query.view();
                 HitTest::hit_test(&view, root, *event);
+            } else {
+                HitTest::clear(ctx);
             }
 
             let mut model = model.on_render();
