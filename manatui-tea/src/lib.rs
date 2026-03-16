@@ -7,6 +7,7 @@ pub mod focus;
 #[cfg(feature = "tachyonfx")]
 pub mod fx;
 pub mod observe;
+pub mod term;
 
 use std::{io::stdout, time::Duration};
 
@@ -273,6 +274,10 @@ fn draw<W: std::io::Write>(ctx: &mut Ctx<DefaultBackend<W>>, root: Element) -> E
 
     if let Err(err) = result {
         tracing::error!("failed to draw: {err}");
+    }
+
+    if let Err(err) = ctx.query_and_show_cursor() {
+        tracing::error!("failed to set cursor position: {err}");
     }
 
     root
