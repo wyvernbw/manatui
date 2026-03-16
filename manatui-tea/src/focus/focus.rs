@@ -122,6 +122,7 @@ impl<'a> FocusGroupItems<'a> {
         for (i, item) in self.items.iter().enumerate() {
             if let HitEvent::Clicked = item.hit_test() {
                 self.index = i;
+                self.group.index = self.index;
                 break;
             }
         }
