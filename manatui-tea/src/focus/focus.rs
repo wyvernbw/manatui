@@ -2,11 +2,14 @@ use ratatui::crossterm::event::{Event, KeyModifiers};
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
 
+use crate::observe::HitEvent;
+
 pub trait Focus {
     fn set_focus(&mut self, value: bool);
     fn focus(&self) -> bool;
     fn rect(&self) -> Option<Rect>;
     fn keymaps(&self) -> &'static [KeyMap];
+    fn hit_test(&self) -> HitEvent;
 }
 
 #[derive(Default, Clone, Debug)]
@@ -116,6 +119,13 @@ impl<'a> FocusGroupItems<'a> {
     }
 
     pub fn commit(mut self) {
+        for (i, item) in self.items.iter().enumerate() {
+            if let HitEvent::Clicked = item.hit_test() {
+                self.index = i;
+                break;
+            }
+        }
+
         self.group.len = self.items.len();
         self.group.current_keymaps = self.items[self.index].keymaps();
         self.group.transitions = Transitions {

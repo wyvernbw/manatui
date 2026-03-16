@@ -6,8 +6,6 @@ use manatui_layout::prelude::*;
 use manatui_layout::ui::View;
 use manatui_macros::{subview, ui};
 use manatui_tea::backends::{DefaultEvent, KeyEventExt};
-use manatui_tea::focus::handlers::{ClickOnEnter, On, OnClickOrKey};
-use manatui_tea::focus::{FocusStyle, FocusTarget};
 use manatui_tea::{Effect, Message, run};
 use manatui_utils::key;
 use ratatui::style::Style;
