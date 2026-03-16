@@ -60,8 +60,9 @@ impl HitTest {
     pub fn empty() -> Self {
         Self::default()
     }
+    #[tailcall]
     pub(crate) fn hit_test(
-        query: &View<'_, (&Props, &Children, &HitTest)>,
+        query: &View<'_, (&Props, &Children, Option<&HitTest>)>,
         root: Element,
         mouse_event: MouseEvent,
     ) {
@@ -79,17 +80,19 @@ impl HitTest {
             props.size.x,
             props.size.y,
         );
-        if rect.contains(ratatui::layout::Position::new(
-            mouse_event.column,
-            mouse_event.row,
-        )) {
-            let hit = match mouse_event.kind {
-                crossterm::event::MouseEventKind::Down(_) => HitEvent::Clicked,
-                crossterm::event::MouseEventKind::Drag(_) => HitEvent::None,
-                crossterm::event::MouseEventKind::Moved => HitEvent::Hovered,
-                _ => HitEvent::None,
-            };
-            hit_test.set(hit);
+        if let Some(hit_test) = hit_test {
+            if rect.contains(ratatui::layout::Position::new(
+                mouse_event.column,
+                mouse_event.row,
+            )) {
+                let hit = match mouse_event.kind {
+                    crossterm::event::MouseEventKind::Down(_) => HitEvent::Clicked,
+                    crossterm::event::MouseEventKind::Drag(_) => HitEvent::None,
+                    crossterm::event::MouseEventKind::Moved => HitEvent::Hovered,
+                    _ => HitEvent::None,
+                };
+                hit_test.set(hit);
+            }
         }
 
         let children = children.clone();
