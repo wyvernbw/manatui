@@ -217,14 +217,16 @@ async fn runtime<Msg: Message, W: std::io::Write>(
                 HitTest::hit_test(&view, root, *event);
             }
 
+            let mut model = model.on_render();
+            advance_delta!(ctx, &mut model, &now);
+
             let (model, mut effect) = match event_msg {
                 Some(ref event_msg) => update(model, event_msg(event.clone())).await,
                 None => (model, Effect::none()),
             };
             tokio::spawn(effect.0.run_effect(msg_stream.dispatch.0.clone()));
 
-            let mut model = model.on_render();
-            advance_delta!(ctx, &mut model, &now);
+            let prev_root = Some(rerender(ctx, &model, &view, prev_root).await);
 
             runtime(
                 model,
