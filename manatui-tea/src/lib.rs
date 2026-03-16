@@ -25,7 +25,7 @@ use tokio::time::Instant;
 
 use crate::{
     backends::{DefaultBackend, DefaultEvent, ManaBackend, MsgStream},
-    observe::AreaRef,
+    observe::{AreaRef, HitTest},
 };
 
 pub type Chan<Msg> = (Sender<Msg>, Receiver<Msg>);
@@ -211,6 +211,12 @@ async fn runtime<Msg: Message, W: std::io::Write>(
         }
 
         Some(RuntimeMsg::Term(event)) => {
+            if let (crossterm::event::Event::Mouse(event), Some(root)) = (&event, prev_root) {
+                let mut query = ctx.query();
+                let view = query.view();
+                HitTest::hit_test(&view, root, *event);
+            }
+
             let (model, mut effect) = match event_msg {
                 Some(ref event_msg) => update(model, event_msg(event.clone())).await,
                 None => (model, Effect::none()),
