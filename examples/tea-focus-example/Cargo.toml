@@ -1,0 +1,11 @@
+[package]
+name = "tea-focus-example"
+version = "0.1.0"
+authors = ["wyvernbw <iamwyvern511@gmail.com>"]
+edition = "2024"
+
+[dependencies]
+color-eyre = "*"
+manatui = { version = "*", git = "https://github.com/wyvernbw/manatui.git",  features = ["macros", "nightly"] }
+smallvec = "1.15.1"
+tokio = { version = "*", features = ["macros", "rt"] }

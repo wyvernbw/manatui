@@ -35,6 +35,7 @@ members = [
     "manatui-utils",
     "manatui-tea",
     "manatui-bench",
+    "examples/*",
     "xtask",
 ]
 resolver = "3"
