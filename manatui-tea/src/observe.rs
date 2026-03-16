@@ -60,7 +60,6 @@ impl HitTest {
     pub fn empty() -> Self {
         Self::default()
     }
-    #[tailcall]
     pub(crate) fn hit_test(
         query: &View<'_, (&Props, &Children, &HitTest)>,
         root: Element,
