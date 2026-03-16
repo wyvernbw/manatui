@@ -1,0 +1,11 @@
+[package]
+name = "manatui-tea-ui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+manatui = { path = "..", features = ["macros"] }
+bon = { workspace = true, optional = true }
+
+[lints]
+workspace = true

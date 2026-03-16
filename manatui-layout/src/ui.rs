@@ -336,6 +336,12 @@ impl<'a> IntoUiBuilderList<()> for Cow<'a, str> {
     }
 }
 
+impl IntoUiBuilderList<()> for EntityBuilder {
+    fn into_list(self) -> impl Iterator<Item = EntityBuilder> {
+        [self].into_iter()
+    }
+}
+
 enum OptionIterator<T> {
     Some(T),
     None,
