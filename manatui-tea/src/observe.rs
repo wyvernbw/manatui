@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crossbeam::atomic::AtomicCell;
 use ratatui::layout::Rect;
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct AreaRef(Arc<AtomicCell<Option<Rect>>>);
 
 impl AreaRef {
