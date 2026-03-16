@@ -14,10 +14,10 @@ use crossterm::terminal::enable_raw_mode;
 use flume::{Receiver, Sender};
 use hecs::Component;
 use manatui_layout::{
-    layout::{Element, ElementCtx, NodePostRenderSchedule, PostRenderSchedule, Props},
+    layout::{Element, ElementCtx, PostRenderSchedule, Props},
     ui::View,
 };
-use ratatui::{Terminal, TerminalOptions, layout::Rect, prelude::Backend};
+use ratatui::{Terminal, TerminalOptions, prelude::Backend};
 use smallbox::SmallBox;
 use tailcall::tailcall;
 use tokio::time::Instant;
@@ -218,22 +218,6 @@ async fn runtime<Msg: Message, W: std::io::Write>(
 
             let mut model = model.on_render();
             advance_delta!(ctx, &mut model, &now);
-            let result = focus::propagate_event::<Msg>(&ctx.el_ctx, &model, &event)
-                .map_err(|_| RuntimeErr::PropagateEventError)?;
-
-            if let Some((msg, mut effect)) = result {
-                tokio::spawn(effect.0.run_effect(msg_stream.dispatch.0.clone()));
-                msg_stream
-                    .dispatch
-                    .0
-                    .send_async(msg)
-                    .await
-                    .map_err(|_| RuntimeErr::ChannelClosed)?;
-            } else {
-                _ = focus::navigation_system::<DefaultBackend<W>>(&mut ctx.el_ctx, &event);
-                _ = focus::set_focus_style(&mut ctx.el_ctx);
-                render::<Msg, W>(ctx, view(&model).await);
-            }
 
             runtime(
                 model,
@@ -268,28 +252,17 @@ async fn rerender<Msg: Message, W: std::io::Write>(
     if let Some(prev) = prev_root {
         ctx.despawn_ui(prev);
     }
-    render::<Msg, W>(ctx, view(model).await)
+    render::<W>(ctx, view(model).await)
 }
 
-fn render<Msg: Message, W: std::io::Write>(
-    ctx: &mut Ctx<DefaultBackend<W>>,
-    view: View,
-) -> Element {
+fn render<W: std::io::Write>(ctx: &mut Ctx<DefaultBackend<W>>, view: View) -> Element {
     let root = ctx.spawn_ui(view);
-    draw::<Msg, W>(ctx, root)
+    draw::<W>(ctx, root)
 }
 
-fn draw<Msg: Message, W: std::io::Write>(
-    ctx: &mut Ctx<DefaultBackend<W>>,
-    root: Element,
-) -> Element {
+fn draw<W: std::io::Write>(ctx: &mut Ctx<DefaultBackend<W>>, root: Element) -> Element {
     let result = ctx.terminal.draw(|frame| {
         let result = ctx.el_ctx.calculate_layout(root, frame.area());
-        focus::generate_ui_stack(&mut ctx.el_ctx, root);
-        focus::init_focus_system(&mut ctx.el_ctx);
-        focus::handlers::specialize_on_click_or_key_handlers::<Msg>(&mut ctx.el_ctx);
-        _ = focus::set_focus_style(&mut ctx.el_ctx);
-
         if let Err(err) = result {
             tracing::error!("failed to calculate layout: {err}");
             return;
@@ -377,7 +350,7 @@ where
     let (model, mut effect) = init().await;
     tokio::spawn(effect.0.run_effect(dispatch.0.clone()));
     let tree = view(&model).await;
-    let root = render::<Msg, W>(&mut ctx, tree);
+    let root = render::<W>(&mut ctx, tree);
 
     runtime()
         .model(model)
