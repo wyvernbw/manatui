@@ -92,6 +92,8 @@ impl HitTest {
                     _ => HitEvent::None,
                 };
                 hit_test.set(hit);
+            } else {
+                hit_test.set(HitEvent::None);
             }
         }
 
