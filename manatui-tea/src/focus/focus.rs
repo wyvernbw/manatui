@@ -135,7 +135,7 @@ impl<'a> FocusGroupItems<'a> {
 
     pub fn commit(mut self) {
         for (i, item) in self.items.iter().enumerate() {
-            if let HitEvent::Clicked = item.hit_test() {
+            if let HitEvent::Clicked(_, _) = item.hit_test() {
                 self.index = i;
                 self.group.index = self.index;
                 break;
@@ -232,6 +232,15 @@ pub const DEFAULT_KEYMAP: KeyMap = KeyMap {
     up: Some(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE)),
     left: Some(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE)),
     right: Some(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)),
+};
+
+pub const CTRL_KEYMAP: KeyMap = KeyMap {
+    next: Some(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)),
+    prev: Some(KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT)),
+    down: Some(KeyEvent::new(KeyCode::Down, KeyModifiers::CONTROL)),
+    up: Some(KeyEvent::new(KeyCode::Up, KeyModifiers::CONTROL)),
+    left: Some(KeyEvent::new(KeyCode::Left, KeyModifiers::CONTROL)),
+    right: Some(KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL)),
 };
 
 pub const VIM_KEYMAP: KeyMap = KeyMap {

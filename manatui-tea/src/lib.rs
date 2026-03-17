@@ -426,6 +426,12 @@ where
 
     #[cfg(feature = "crossterm")]
     {
+        _ = crossterm::execute!(
+            stdout(),
+            crossterm::event::PushKeyboardEnhancementFlags(
+                crossterm::event::KeyboardEnhancementFlags::all()
+            )
+        );
         if !is_inline {
             _ = crossterm::execute!(stdout(), crossterm::terminal::EnterAlternateScreen);
         }

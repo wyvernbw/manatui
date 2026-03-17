@@ -42,8 +42,9 @@ pub struct HitTest(Arc<AtomicCell<HitEvent>>);
 pub enum HitEvent {
     #[default]
     None,
-    Clicked,
-    Hovered,
+    Clicked(u16, u16),
+    Hovered(u16, u16),
+    Drag(u16, u16),
 }
 
 impl HitTest {
@@ -88,9 +89,15 @@ impl HitTest {
                 mouse_event.row,
             )) {
                 let hit = match mouse_event.kind {
-                    crossterm::event::MouseEventKind::Down(_) => HitEvent::Clicked,
-                    crossterm::event::MouseEventKind::Drag(_) => HitEvent::None,
-                    crossterm::event::MouseEventKind::Moved => HitEvent::Hovered,
+                    crossterm::event::MouseEventKind::Down(_) => {
+                        HitEvent::Clicked(mouse_event.column, mouse_event.row)
+                    }
+                    crossterm::event::MouseEventKind::Drag(_) => {
+                        HitEvent::Drag(mouse_event.column, mouse_event.row)
+                    }
+                    crossterm::event::MouseEventKind::Moved => {
+                        HitEvent::Hovered(mouse_event.column, mouse_event.row)
+                    }
                     _ => HitEvent::None,
                 };
                 hit_test.set(hit);

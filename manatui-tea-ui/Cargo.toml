@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 manatui = { path = "..", features = ["macros"] }
 bon = { workspace = true, optional = true }
+arboard = "3.6.1"
 
 [lints]
 workspace = true
