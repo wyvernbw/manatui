@@ -234,6 +234,15 @@ pub const DEFAULT_KEYMAP: KeyMap = KeyMap {
     right: Some(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)),
 };
 
+pub const CYCLE_KEYMAP: KeyMap = KeyMap {
+    next: Some(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)),
+    prev: Some(KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT)),
+    down: None,
+    up: None,
+    left: None,
+    right: None,
+};
+
 pub const CTRL_KEYMAP: KeyMap = KeyMap {
     next: Some(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)),
     prev: Some(KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT)),

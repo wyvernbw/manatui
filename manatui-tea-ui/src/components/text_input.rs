@@ -4,7 +4,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use manatui::ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use manatui::ratatui::text::{Line, Span};
-use manatui::tea::focus::{CTRL_KEYMAP, DEFAULT_KEYMAP, Focus, FocusEvent, VIM_CTRL_KEYMAP};
+use manatui::tea::focus::{
+    CTRL_KEYMAP, CYCLE_KEYMAP, DEFAULT_KEYMAP, Focus, FocusEvent, VIM_CTRL_KEYMAP,
+};
 use manatui::tea::observe::{AreaRef, HitTest};
 use manatui::utils::keyv2;
 use manatui::{prelude::*, tea};
@@ -51,14 +53,24 @@ fn split_three_split_at(s: &str, range: RangeInclusive<u16>) -> (&str, &str, &st
 }
 
 #[subview]
-pub fn text_input_view(state: &TextInput, #[builder(default = "")] placeholder: &str) -> View {
+pub fn text_input_view(
+    state: &TextInput,
+    #[builder(default = "")] placeholder: &str,
+    cursor_style: Option<Style>,
+    select_style: Option<Style>,
+) -> View {
+    let cursor_style =
+        cursor_style.unwrap_or_else(|| Style::new().fg(Color::Black).bg(Color::from_u32(0xf37994)));
+    let select_style =
+        select_style.unwrap_or_else(|| Style::new().bg(Color::from_u32(0x8e4857)).fg(Color::Black));
     let cursor = state
         .focused
         .load(Ordering::Relaxed)
         .then(|| state.area_ref.get())
         .flatten()
         .map(|rect| {
-            ui(Block::new().style(Style::new().remove_modifier(Modifier::DIM).fg(Color::Green)))
+            let char = state.text.chars().nth(state.cursor as usize).unwrap_or(' ');
+            ui(Text::raw(char.to_string()).style(cursor_style))
                 .with((
                     Width::fixed(1),
                     Height::fixed(1),
@@ -67,7 +79,6 @@ pub fn text_input_view(state: &TextInput, #[builder(default = "")] placeholder: 
                         Value::Cells(rect.y),
                     ),
                 ))
-                .child(ui(Text::raw("█")))
                 .done()
         });
 
@@ -77,7 +88,7 @@ pub fn text_input_view(state: &TextInput, #[builder(default = "")] placeholder: 
             let (start, mid, end) = split_three_split_at(&state.text, sel.range.clone());
             Line::from_iter([
                 Span::raw(start.to_owned()),
-                Span::raw(mid.to_owned()).style(Style::new().reversed()),
+                Span::raw(mid.to_owned()).style(select_style),
                 Span::raw(end.to_owned()),
             ])
         }
@@ -196,7 +207,7 @@ impl TextInput {
     #[must_use]
     pub fn update(mut self, event: &Event) -> (Self, TextInputEvent) {
         if !self.focused.load(Ordering::Relaxed) {
-            return self.no_event();
+            return self.no_selection().no_event();
         }
 
         match (self.hit_test.get(), self.rect()) {
@@ -224,10 +235,11 @@ impl TextInput {
                 modifiers,
                 ..
             }) => {
-                if modifiers.contains(KeyModifiers::SHIFT) {
-                    self = self.ensure_selection().move_selection(-1);
+                if modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::SUPER) {
+                    self.cursor = 0;
+                } else {
+                    self = self.move_cursor(-1);
                 }
-                self = self.move_cursor(-1);
                 self.no_event()
             }
             event::Event::Key(event::KeyEvent {
@@ -236,10 +248,11 @@ impl TextInput {
                 modifiers,
                 ..
             }) => {
-                if modifiers.contains(KeyModifiers::SHIFT) {
-                    self = self.ensure_selection().move_selection(1);
+                if modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::SUPER) {
+                    self.cursor = self.text.len() as u16;
+                } else {
+                    self = self.move_cursor(1);
                 }
-                self = self.move_cursor(1);
                 self.no_event()
             }
 
@@ -349,7 +362,7 @@ impl Focus for TextInput {
     }
 
     fn keymaps(&self) -> &'static [tea::focus::KeyMap] {
-        &[CTRL_KEYMAP, VIM_CTRL_KEYMAP]
+        &[CYCLE_KEYMAP, VIM_CTRL_KEYMAP]
     }
 
     fn hit_test(&self) -> manatui::tea::observe::HitEvent {
