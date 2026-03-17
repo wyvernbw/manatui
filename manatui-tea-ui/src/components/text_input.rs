@@ -1,16 +1,16 @@
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use manatui::ratatui::crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use manatui::ratatui::layout::Offset;
-use manatui::ratatui::text::Span;
-use manatui::tea::focus::{DEFAULT_KEYMAP, Focus, VIM_CTRL_KEYMAP};
+use manatui::tea::focus::{DEFAULT_KEYMAP, Focus, FocusEvent, VIM_CTRL_KEYMAP};
 use manatui::tea::observe::{AreaRef, HitTest};
-use manatui::tea::term::CursorAt;
 use manatui::utils::keyv2;
 use manatui::{prelude::*, tea};
 
 #[derive(Default, Debug, Clone)]
 pub struct TextInput {
     text: String,
-    focused: bool,
+    focused: Arc<AtomicBool>,
     cursor: u16,
     area_ref: AreaRef,
     hit_test: HitTest,
@@ -19,20 +19,24 @@ pub struct TextInput {
 #[subview]
 pub fn text_input_view(state: &TextInput, #[builder(default = "")] placeholder: &str) -> View {
     let text = &state.text;
-    let hit = &state.hit_test;
-    let cursor = state.area_ref.get().map(|rect| {
-        ui(Block::new().style(Style::new().remove_modifier(Modifier::DIM).fg(Color::Green)))
-            .with((
-                Width::fixed(1),
-                Height::fixed(1),
-                Position::Absolute(
-                    Value::Cells(rect.x + state.cursor + 2),
-                    Value::Cells(rect.y),
-                ),
-            ))
-            .child(ui(Text::raw("█")))
-            .done()
-    });
+    let cursor = state
+        .focused
+        .load(Ordering::Relaxed)
+        .then(|| state.area_ref.get())
+        .flatten()
+        .map(|rect| {
+            ui(Block::new().style(Style::new().remove_modifier(Modifier::DIM).fg(Color::Green)))
+                .with((
+                    Width::fixed(1),
+                    Height::fixed(1),
+                    Position::Absolute(
+                        Value::Cells(rect.x + state.cursor + 2),
+                        Value::Cells(rect.y),
+                    ),
+                ))
+                .child(ui(Text::raw("█")))
+                .done()
+        });
     ui(Block::new())
         .with((
             Direction::Horizontal,
@@ -57,12 +61,21 @@ impl TextInput {
         Self::default()
     }
 
+    fn event(self, event: TextInputEvent) -> (Self, TextInputEvent) {
+        (self, event)
+    }
+
+    fn no_event(self) -> (Self, TextInputEvent) {
+        self.event(TextInputEvent::None)
+    }
+
     #[must_use]
-    pub fn update(mut self, event: &Event) -> Self {
-        if !self.focused {
-            return self;
+    pub fn update(mut self, event: &Event) -> (Self, TextInputEvent) {
+        if !self.focused.load(Ordering::Relaxed) {
+            return self.no_event();
         }
         match event {
+            keyv2!(enter) => self.event(TextInputEvent::Confirm),
             Event::Key(KeyEvent {
                 code: KeyCode::Backspace,
                 modifiers: KeyModifiers::CONTROL | KeyModifiers::META,
@@ -70,7 +83,7 @@ impl TextInput {
             }) => {
                 self.text.clear();
                 self.cursor = 0;
-                self
+                self.no_event()
             }
             Event::Key(KeyEvent {
                 code: KeyCode::Backspace,
@@ -79,7 +92,7 @@ impl TextInput {
             }) => {
                 self.text.pop();
                 self.cursor = self.cursor.saturating_sub(1);
-                self
+                self.no_event()
             }
             Event::Key(KeyEvent {
                 code: KeyCode::Char(ch),
@@ -87,7 +100,7 @@ impl TextInput {
                 ..
             }) => {
                 if !modifiers.difference(KeyModifiers::SHIFT).is_empty() {
-                    return self;
+                    return self.no_event();
                 }
                 match modifiers.contains(KeyModifiers::SHIFT) {
                     true => {
@@ -98,20 +111,39 @@ impl TextInput {
                     }
                 }
                 self.cursor += 1;
-                self
+                self.no_event()
             }
-            _ => self,
+            _ => self.no_event(),
+        }
+    }
+
+    #[must_use]
+    pub fn value(&self) -> &str {
+        &self.text
+    }
+}
+
+pub enum TextInputEvent {
+    None,
+    Confirm,
+}
+
+impl From<TextInputEvent> for FocusEvent {
+    fn from(value: TextInputEvent) -> FocusEvent {
+        match value {
+            TextInputEvent::None => FocusEvent::None,
+            TextInputEvent::Confirm => FocusEvent::Next,
         }
     }
 }
 
 impl Focus for TextInput {
-    fn set_focus(&mut self, value: bool) {
-        self.focused = value;
+    fn set_focus(&self, value: bool) {
+        self.focused.store(value, Ordering::Relaxed);
     }
 
     fn focus(&self) -> bool {
-        self.focused
+        self.focused.load(Ordering::Relaxed)
     }
 
     fn rect(&self) -> Option<ratatui::prelude::Rect> {

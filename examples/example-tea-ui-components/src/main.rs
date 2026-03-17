@@ -15,6 +15,7 @@ async fn main() -> Result<()> {
         .update(Model::update)
         .event_msg(Msg::Event)
         .quit_signal(|_, msg| matches!(msg, Msg::Quit))
+        .enable_mouse(true)
         .run()
         .await?;
 
@@ -23,7 +24,8 @@ async fn main() -> Result<()> {
 
 struct Model {
     focus: FocusGroup,
-    text_input: TextInput,
+    text_input_1: TextInput,
+    text_input_2: TextInput,
 }
 
 #[derive(Debug, Clone)]
@@ -43,7 +45,8 @@ impl Model {
         (
             Model {
                 focus: FocusGroup::new(),
-                text_input: TextInput::new(),
+                text_input_1: TextInput::new(),
+                text_input_2: TextInput::new(),
             },
             Effect::none(),
         )
@@ -63,6 +66,7 @@ impl Model {
                 match self.focus.update(&event) {
                     tea::focus::EventOutcome::Consumed(focus) => {
                         self.focus = focus;
+                        self = self.build_focus();
                         return (self, Effect::none());
                     }
                     tea::focus::EventOutcome::Unhandled(focus) => {
@@ -70,8 +74,9 @@ impl Model {
                     }
                 }
 
+                (self.text_input_1, self.focus) = self.focus.pipe(self.text_input_1.update(&event));
+                (self.text_input_2, self.focus) = self.focus.pipe(self.text_input_2.update(&event));
                 self = self.build_focus();
-                self.text_input = self.text_input.update(&event);
 
                 (self, Effect::none())
             }
@@ -79,7 +84,10 @@ impl Model {
     }
 
     fn build_focus(mut self) -> Self {
-        self.focus.items(&mut self.text_input).commit();
+        self.focus
+            .items(&self.text_input_1)
+            .next(&self.text_input_2)
+            .commit();
         self
     }
 }
@@ -88,8 +96,13 @@ async fn view(model: &Model) -> View {
     ui! {
         <Block Center Width::grow() Height::grow()>
             <TextInputView
-                .state={&model.text_input}
+                .state={&model.text_input_1}
                 .placeholder="Jack Frost"
+                Width::fixed(20)
+            />
+            <TextInputView
+                .state={&model.text_input_2}
+                .placeholder="Magician"
                 Width::fixed(20)
             />
         </Block>

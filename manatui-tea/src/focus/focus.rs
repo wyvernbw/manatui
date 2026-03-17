@@ -5,7 +5,7 @@ use ratatui::layout::Rect;
 use crate::observe::HitEvent;
 
 pub trait Focus {
-    fn set_focus(&mut self, value: bool);
+    fn set_focus(&self, value: bool);
     fn focus(&self) -> bool;
     fn rect(&self) -> Option<Rect>;
     fn keymaps(&self) -> &'static [KeyMap];
@@ -22,7 +22,7 @@ pub struct FocusGroup {
 
 pub struct FocusGroupItems<'a> {
     group: &'a mut FocusGroup,
-    items: Vec<&'a mut dyn Focus>,
+    items: Vec<&'a dyn Focus>,
     index: usize,
 }
 
@@ -46,9 +46,9 @@ impl FocusGroup {
         Self::default()
     }
 
-    pub fn items<'a>(&'a mut self, first: &'a mut impl Focus) -> FocusGroupItems<'a> {
+    pub fn items<'a>(&'a mut self, first: &'a impl Focus) -> FocusGroupItems<'a> {
         FocusGroupItems {
-            items: vec![first as &'a mut dyn Focus],
+            items: vec![first as &'a dyn Focus],
             index: self.index,
             group: self,
         }
@@ -109,12 +109,27 @@ impl FocusGroup {
         }
         EventOutcome::Unhandled(self)
     }
+
+    #[must_use]
+    pub fn handle_event(self, event: impl Into<FocusEvent>) -> Self {
+        let effect = event.into();
+        match effect {
+            FocusEvent::None => self,
+            FocusEvent::Next => self.focus_next(),
+            FocusEvent::Prev => self.focus_prev(),
+        }
+    }
+
+    #[must_use]
+    pub fn pipe<T>(self, value: (T, impl Into<FocusEvent>)) -> (T, Self) {
+        (value.0, self.handle_event(value.1))
+    }
 }
 
 impl<'a> FocusGroupItems<'a> {
     #[must_use]
-    pub fn next(mut self, item: &'a mut impl Focus) -> Self {
-        self.items.push(item as &'a mut dyn Focus);
+    pub fn next(mut self, item: &'a impl Focus) -> Self {
+        self.items.push(item as &'a dyn Focus);
         self
     }
 
@@ -236,3 +251,11 @@ pub const VIM_CTRL_KEYMAP: KeyMap = KeyMap {
     left: Some(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::CONTROL)),
     right: Some(KeyEvent::new(KeyCode::Char('l'), KeyModifiers::CONTROL)),
 };
+
+#[derive(Default, Debug, Clone, Copy, Hash, Eq, PartialEq)]
+pub enum FocusEvent {
+    #[default]
+    None,
+    Next,
+    Prev,
+}
