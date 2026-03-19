@@ -63,7 +63,7 @@ impl<Msg: Clone + Send + Sync + 'static> Effect<Msg> {
     }
     pub fn new<
         Fut: Future<Output = ()> + Send + Sync + 'static,
-        F: FnMut(Sender<Msg>) -> Fut + 'static + Send + Sync,
+        F: FnOnce(Sender<Msg>) -> Fut + 'static + Send + Sync,
     >(
         f: F,
     ) -> Self {
