@@ -37,20 +37,24 @@ pub trait SignalFn<Msg, Model> = Fn(&Model, &Msg) -> bool;
 type PinnedFuture<R> = SmallBox<dyn Future<Output = R> + Send + Sync + 'static, [usize; 4]>;
 
 pub trait EffectFn<Msg>: Send + Sync + 'static {
-    fn run_effect(&mut self, tx: Sender<Msg>) -> PinnedFuture<()>;
+    fn run_effect(self: Box<Self>, tx: Sender<Msg>) -> PinnedFuture<()>;
 }
 
 impl<F, Fut, Msg> EffectFn<Msg> for F
 where
-    F: FnMut(Sender<Msg>) -> Fut + Send + Sync + 'static,
+    F: FnOnce(Sender<Msg>) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = ()> + Send + Sync + 'static,
 {
-    fn run_effect(&mut self, tx: Sender<Msg>) -> PinnedFuture<()> {
+    fn run_effect(self: Box<Self>, tx: Sender<Msg>) -> PinnedFuture<()> {
         let future = (self)(tx);
         SmallBox::<Fut, [usize; 4]>::new(future as _)
     }
 }
-pub struct Effect<Msg>(SmallBox<dyn EffectFn<Msg>, [usize; 4]>);
+pub enum Effect<Msg> {
+    None,
+    Msg(Msg),
+    Callback(Box<dyn EffectFn<Msg>>),
+}
 
 impl<Msg: Clone + Send + Sync + 'static> Effect<Msg> {
     #[must_use]
@@ -63,7 +67,7 @@ impl<Msg: Clone + Send + Sync + 'static> Effect<Msg> {
     >(
         f: F,
     ) -> Self {
-        Self(SmallBox::new(f) as _)
+        Self::Callback(Box::new(f))
     }
 
     pub fn msg(msg: Msg) -> Self {
@@ -73,6 +77,17 @@ impl<Msg: Clone + Send + Sync + 'static> Effect<Msg> {
                 _ = tx.send_async(msg).await;
             }
         })
+    }
+
+    fn run(self, tx: Sender<Msg>) -> Option<Msg> {
+        match self {
+            Effect::None => None,
+            Effect::Msg(msg) => Some(msg),
+            Effect::Callback(effect_fn) => {
+                tokio::spawn(effect_fn.run_effect(tx));
+                None
+            }
+        }
     }
 }
 
@@ -133,6 +148,21 @@ macro_rules! advance_delta {
 }
 
 #[tailcall]
+async fn update_recursive<Msg: Message>(
+    msg: Msg,
+    tx: Sender<Msg>,
+    model: Msg::Model,
+    update: &impl UpdateFn<Msg, Msg::Model>,
+) -> Msg::Model {
+    let (model, effect) = update(model, msg).await;
+    let msg = effect.run(tx.clone());
+    match msg {
+        Some(msg) => return update_recursive(msg, tx, model, update),
+        _ => model,
+    }
+}
+
+#[tailcall]
 #[bon::builder]
 async fn runtime<Msg: Message, W: std::io::Write>(
     model: Msg::Model,
@@ -175,8 +205,7 @@ async fn runtime<Msg: Message, W: std::io::Write>(
         Some(RuntimeMsg::App(msg, false)) => {
             let mut model = model.on_render();
             advance_delta!(ctx, &mut model, &now);
-            let (model, mut effect) = update(model, msg).await;
-            tokio::spawn(effect.0.run_effect(msg_stream.dispatch.0.clone()));
+            let model = update_recursive(msg, msg_stream.dispatch.0.clone(), model, &update).await;
 
             let prev_root = Some(rerender(ctx, &model, &view, prev_root).await);
 
@@ -194,8 +223,7 @@ async fn runtime<Msg: Message, W: std::io::Write>(
         }
 
         Some(RuntimeMsg::App(msg, true)) => {
-            let (model, mut effect) = update(model, msg).await;
-            tokio::spawn(effect.0.run_effect(msg_stream.dispatch.0.clone()));
+            let model = update_recursive(msg, msg_stream.dispatch.0.clone(), model, &update).await;
 
             runtime(
                 model,
@@ -222,11 +250,18 @@ async fn runtime<Msg: Message, W: std::io::Write>(
             let mut model = model.on_render();
             advance_delta!(ctx, &mut model, &now);
 
-            let (model, mut effect) = match event_msg {
-                Some(ref event_msg) => update(model, event_msg(event.clone())).await,
-                None => (model, Effect::none()),
+            let model = match event_msg {
+                Some(ref event_msg) => {
+                    update_recursive(
+                        event_msg(event),
+                        msg_stream.dispatch.0.clone(),
+                        model,
+                        &update,
+                    )
+                    .await
+                }
+                None => model,
             };
-            tokio::spawn(effect.0.run_effect(msg_stream.dispatch.0.clone()));
 
             let prev_root = Some(rerender(ctx, &model, &view, prev_root).await);
 
@@ -362,8 +397,10 @@ where
         .get_cursor_position()
         .map_err(|_| RuntimeErr::InitErr)?;
 
-    let (model, mut effect) = init().await;
-    tokio::spawn(effect.0.run_effect(dispatch.0.clone()));
+    let (mut model, mut effect) = init().await;
+    while let Some(msg) = effect.run(msg_stream.dispatch.0.clone()) {
+        (model, effect) = update(model, msg).await;
+    }
     let tree = view(&model).await;
     let root = render::<W>(&mut ctx, tree);
 
