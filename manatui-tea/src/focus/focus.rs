@@ -198,12 +198,12 @@ impl<'a> FocusGroupItems<'a> {
 
 #[derive(Default, Clone, Debug)]
 pub struct KeyMap {
-    next: Option<KeyEvent>,
-    prev: Option<KeyEvent>,
-    down: Option<KeyEvent>,
-    up: Option<KeyEvent>,
-    left: Option<KeyEvent>,
-    right: Option<KeyEvent>,
+    pub next: Option<KeyEvent>,
+    pub prev: Option<KeyEvent>,
+    pub down: Option<KeyEvent>,
+    pub up: Option<KeyEvent>,
+    pub left: Option<KeyEvent>,
+    pub right: Option<KeyEvent>,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -264,6 +264,15 @@ pub const VIM_KEYMAP: KeyMap = KeyMap {
 pub const VIM_CTRL_KEYMAP: KeyMap = KeyMap {
     next: Some(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)),
     prev: Some(KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT)),
+    down: Some(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::CONTROL)),
+    up: Some(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL)),
+    left: Some(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::CONTROL)),
+    right: Some(KeyEvent::new(KeyCode::Char('l'), KeyModifiers::CONTROL)),
+};
+
+pub const VIM_CTRL_KEYMAP_NO_CYCLE: KeyMap = KeyMap {
+    next: None,
+    prev: None,
     down: Some(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::CONTROL)),
     up: Some(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL)),
     left: Some(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::CONTROL)),

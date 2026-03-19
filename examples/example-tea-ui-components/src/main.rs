@@ -5,6 +5,7 @@ use manatui::tea;
 use manatui::tea::Effect;
 use manatui::tea::focus::FocusGroup;
 use manatui::utils::keyv2;
+use manatui_tea_ui::components::list::{List, ListViewCompact};
 use manatui_tea_ui::components::text_input::{TextInput, TextInputView};
 
 #[tokio::main(flavor = "current_thread")]
@@ -26,6 +27,7 @@ struct Model {
     focus: FocusGroup,
     text_input_1: TextInput,
     text_input_2: TextInput,
+    list: List,
 }
 
 #[derive(Debug, Clone)]
@@ -47,6 +49,7 @@ impl Model {
                 focus: FocusGroup::new(),
                 text_input_1: TextInput::new(),
                 text_input_2: TextInput::new(),
+                list: List::new(),
             },
             Effect::none(),
         )
@@ -76,6 +79,7 @@ impl Model {
 
                 (self.text_input_1, self.focus) = self.focus.pipe(self.text_input_1.update(&event));
                 (self.text_input_2, self.focus) = self.focus.pipe(self.text_input_2.update(&event));
+                (self.list, self.focus) = self.focus.pipe(self.list.update(&event));
                 self = self.build_focus();
 
                 (self, Effect::none())
@@ -87,24 +91,29 @@ impl Model {
         self.focus
             .items(&self.text_input_1)
             .next(&self.text_input_2)
+            .next(&self.list)
             .commit();
         self
     }
 }
 
 async fn view(model: &Model) -> View {
+    let items = ["agi", "agilao", "agidyne", "media"];
     ui! {
-        <Block Center Width::grow() Height::grow()>
-            <TextInputView
-                .state={&model.text_input_1}
-                .placeholder="Jack Frost"
-                Width::fixed(20)
-            />
-            <TextInputView
-                .state={&model.text_input_2}
-                .placeholder="Magician"
-                Width::fixed(20)
-            />
+        <Block Width::grow() Height::grow() Center>
+            <Block>
+                <TextInputView
+                    .state={&model.text_input_1}
+                    .placeholder="Jack Frost"
+                    Width::fixed(20)
+                />
+                <TextInputView
+                    .state={&model.text_input_2}
+                    .placeholder="Magician"
+                    Width::fixed(20)
+                />
+                <ListViewCompact .state={&model.list} .items={items.into_iter()}/>
+            </Block>
         </Block>
     }
 }
