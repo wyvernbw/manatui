@@ -98,7 +98,7 @@ impl HitTest {
                     crossterm::event::MouseEventKind::Moved => {
                         HitEvent::Hovered(mouse_event.column, mouse_event.row)
                     }
-                    _ => HitEvent::None,
+                    _ => HitEvent::Hovered(mouse_event.column, mouse_event.row),
                 };
                 hit_test.set(hit);
             } else {
