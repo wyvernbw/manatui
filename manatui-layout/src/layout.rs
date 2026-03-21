@@ -382,7 +382,12 @@ impl ElementCtx {
 
         #[expect(clippy::manual_checked_ops)]
         if grow_count != 0 {
+            let mut depth = 0;
             while remaining != 0 {
+                if depth >= 1024 {
+                    break;
+                }
+                depth += 1;
                 // find smallest and second smallest element
                 let smallest = buffer
                     .array_windows::<2>()
