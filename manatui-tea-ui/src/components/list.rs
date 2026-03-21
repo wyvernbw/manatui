@@ -19,6 +19,7 @@ pub struct List {
     focused: Arc<AtomicBool>,
     area_ref: AreaRef,
     hit_test: HitTest,
+    tab_navigation: bool,
 }
 
 impl Default for List {
@@ -29,6 +30,7 @@ impl Default for List {
             focused: Arc::default(),
             area_ref: AreaRef::empty(),
             hit_test: HitTest::empty(),
+            tab_navigation: true,
         }
     }
 }
@@ -37,6 +39,11 @@ impl List {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+    #[must_use]
+    pub fn set_tab_navigation(mut self, value: bool) -> Self {
+        self.tab_navigation = value;
+        self
     }
     #[must_use]
     pub fn select(mut self, idx: Option<usize>) -> Self {
@@ -181,7 +188,10 @@ impl Focus for List {
     }
 
     fn keymaps(&self) -> &'static [manatui::tea::focus::KeyMap] {
-        &[VIM_CTRL_KEYMAP_NO_CYCLE]
+        match self.tab_navigation {
+            true => &[VIM_CTRL_KEYMAP_NO_CYCLE],
+            false => &[VIM_CTRL_KEYMAP],
+        }
     }
 
     fn hit_test(&self) -> manatui::tea::observe::HitEvent {
