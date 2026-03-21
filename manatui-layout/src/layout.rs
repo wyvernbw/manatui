@@ -380,7 +380,6 @@ impl ElementCtx {
         let mut search_start = 0;
         let grow_count = buffer.iter().filter(|e| e.can_grow).count();
 
-        #[expect(clippy::manual_checked_ops)]
         if grow_count != 0 {
             let mut depth = 0;
             while remaining != 0 {
@@ -426,6 +425,9 @@ impl ElementCtx {
                 };
                 let second_smallest = smallest + 1;
                 search_start = second_smallest;
+                if search_start >= buffer.len() {
+                    search_start = 0;
+                }
                 let smallest_size = buffer[smallest].size;
                 let second_smallest_size = buffer[second_smallest].size;
                 for entry in buffer.iter_mut() {
