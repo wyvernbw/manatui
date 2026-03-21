@@ -89,9 +89,10 @@ impl Model {
 
     fn build_focus(mut self) -> Self {
         self.focus
-            .items(&self.text_input_1)
-            .next(&self.text_input_2)
-            .next(&self.list)
+            .items()
+            .next_untagged(&self.text_input_1)
+            .next_untagged(&self.text_input_2)
+            .next_untagged(&self.list)
             .commit();
         self
     }
