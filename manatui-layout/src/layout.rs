@@ -15,7 +15,7 @@ use ratatui::{
     buffer::Buffer,
     layout::{Direction, Margin, Rect},
     style::{Style, Styled},
-    widgets::{Padding, Widget},
+    widgets::{Clear, Padding, Widget},
 };
 use ratatui::{layout::Offset, widgets::StatefulWidget};
 pub use tui_scrollview::{ScrollView, ScrollViewState};
@@ -37,6 +37,8 @@ pub trait ElWidget<M>: std::fmt::Debug + Component {
 pub struct WidgetMarker;
 /// marker for [`ElWidget`] trait.
 pub struct StatefulWidgetMarker;
+/// marker for [`ElWidget`] trait.
+pub struct UnstyledWidgetMarker;
 
 impl<W: 'static> ElWidget<WidgetMarker> for W
 where
@@ -54,6 +56,20 @@ where
 
     fn get_style(&self) -> Style {
         self.style()
+    }
+}
+
+impl ElWidget<()> for Clear {
+    type State = ();
+
+    fn render_element(&self, area: Rect, buf: &mut Buffer, _: &mut Self::State) {
+        self.render(area, buf);
+    }
+
+    fn set_style(&mut self, _: Style) {}
+
+    fn get_style(&self) -> Style {
+        Style::default()
     }
 }
 
@@ -282,6 +298,7 @@ impl ElementCtx {
             .iter()
             .copied()
             .flat_map(|child| unsafe { view.get_unchecked(child) })
+            .filter(|el| !el.position.is_absolute())
             .map(|el| el.props.size)
             .sum::<U16Vec2>()
     }
@@ -663,6 +680,10 @@ impl ElementCtx {
         let (props, children) = query.get().unwrap();
         let area = props.split_area(area, offset);
 
+        if self.get::<&Clear>(root).is_ok() {
+            Clear.render(area, buf);
+        }
+
         (props.render)(self, root, area, buf);
         let children = children.clone();
         drop(query);
@@ -704,10 +725,11 @@ impl ElementCtx {
             }
 
             _ = self.insert_one(root, scrollview);
-        } else {
-            for child in children.iter() {
-                self.render_impl(child, area, buf, offset);
-            }
+            return;
+        }
+
+        for child in children.iter() {
+            self.render_impl(child, area, buf, offset);
         }
     }
 }
@@ -1175,6 +1197,24 @@ pub enum Position {
     Auto,
     /// absolute coordinates in terminal screen space.
     Absolute(Value, Value),
+}
+
+impl Position {
+    /// Returns `true` if the position is [`Absolute`].
+    ///
+    /// [`Absolute`]: Position::Absolute
+    #[must_use]
+    pub fn is_absolute(&self) -> bool {
+        matches!(self, Self::Absolute(..))
+    }
+
+    /// Returns `true` if the position is [`Auto`].
+    ///
+    /// [`Auto`]: Position::Auto
+    #[must_use]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
 }
 
 /// an amount of cells on the terminal grid
