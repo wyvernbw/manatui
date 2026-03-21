@@ -381,17 +381,13 @@ impl ElementCtx {
         let grow_count = buffer.iter().filter(|e| e.can_grow).count();
 
         if grow_count != 0 {
-            let mut depth = 0;
             while remaining != 0 {
-                if depth >= 1024 {
-                    break;
-                }
-                depth += 1;
                 // find smallest and second smallest element
                 let smallest = buffer
                     .array_windows::<2>()
                     .skip(search_start)
-                    .position(|[a, b]| b.size > a.size);
+                    .position(|[a, b]| b.size > a.size)
+                    .map(|i| i + search_start);
 
                 let Some(smallest) = smallest else {
                     for entry in buffer.iter() {
@@ -425,9 +421,6 @@ impl ElementCtx {
                 };
                 let second_smallest = smallest + 1;
                 search_start = second_smallest;
-                if search_start >= buffer.len() {
-                    search_start = 0;
-                }
                 let smallest_size = buffer[smallest].size;
                 let second_smallest_size = buffer[second_smallest].size;
                 for entry in buffer.iter_mut() {
@@ -440,6 +433,8 @@ impl ElementCtx {
                         }
                     }
                 }
+                tracing::trace!(?buffer);
+                tracing::trace!(?remaining, ?smallest, ?second_smallest);
             }
         }
 
