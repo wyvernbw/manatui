@@ -1,6 +1,0 @@
-# configuration for https://cargo-generate.github.io/cargo-generate/
-[template]
-ignore = ["target/"]
-sub_templates = [
-  "templates/minimal-unstable"
-]
