@@ -51,7 +51,7 @@ impl List {
     pub fn select_offset(self, offset: isize) -> Self {
         let new_idx = self.inner.selected().map(|idx| {
             idx.saturating_add_signed(offset)
-                .clamp(0, self.len.load(Ordering::Relaxed) - 1)
+                .clamp(0, self.len.load(Ordering::Relaxed).saturating_sub(1))
         });
         self.select(new_idx)
     }
@@ -97,7 +97,8 @@ impl List {
 
         match event {
             keyv2!('j') | keyv2!(down) | keyv2!(tab)
-                if self.inner.selected() == Some(self.len.load(Ordering::Relaxed) - 1) =>
+                if self.inner.selected()
+                    == Some(self.len.load(Ordering::Relaxed).saturating_sub(1)) =>
             {
                 (self, ListEvent::FocusNext)
             }
