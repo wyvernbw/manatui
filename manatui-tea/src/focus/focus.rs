@@ -23,6 +23,7 @@ pub struct FocusGroup<T: Copy = ()> {
     len: AtomicUsize,
     current_keymaps: AtomicCell<&'static [KeyMap]>,
     transitions: AtomicCell<Transitions>,
+    wrap_around: bool,
 }
 
 impl<T: Copy> Default for FocusGroup<T> {
@@ -33,6 +34,7 @@ impl<T: Copy> Default for FocusGroup<T> {
             len: Default::default(),
             current_keymaps: Default::default(),
             transitions: Default::default(),
+            wrap_around: false,
         }
     }
 }
@@ -72,6 +74,12 @@ impl<T: Copy> FocusGroup<T> {
         Self::default()
     }
 
+    #[must_use]
+    pub fn set_wrap_around(mut self, value: bool) -> Self {
+        self.wrap_around = value;
+        self
+    }
+
     pub fn items(&self) -> FocusGroupItems<'_, T> {
         FocusGroupItems {
             items: vec![],
@@ -80,28 +88,35 @@ impl<T: Copy> FocusGroup<T> {
         }
     }
 
+    fn clamp_or_wrap(&self, idx: usize) -> usize {
+        match self.wrap_around {
+            true => idx % self.len.load(Ordering::Relaxed),
+            false => idx.clamp(0, self.len.load(Ordering::Relaxed).saturating_sub(1)),
+        }
+    }
+
     #[must_use]
     pub fn focus_next(self) -> Self {
         let idx = self.index.load(Ordering::Relaxed);
         let idx = idx + 1;
-        let idx = idx.clamp(0, self.len.load(Ordering::Relaxed).saturating_sub(1));
+        let idx = self.clamp_or_wrap(idx);
         self.index.store(idx, Ordering::Relaxed);
         self
     }
 
     #[must_use]
     pub fn focus_prev(self) -> Self {
-        let index = self.index.load(Ordering::Relaxed);
-        let index = index.saturating_sub(1);
-        let index = index.clamp(0, self.len.load(Ordering::Relaxed).saturating_sub(1));
-        self.index.store(index, Ordering::Relaxed);
+        let idx = self.index.load(Ordering::Relaxed);
+        let idx = idx.saturating_sub(1);
+        let idx = self.clamp_or_wrap(idx);
+        self.index.store(idx, Ordering::Relaxed);
         self
     }
 
     #[must_use]
-    pub fn focus_at(self, index: usize) -> Self {
-        let index = index.clamp(0, self.len.load(Ordering::Relaxed).saturating_sub(1));
-        self.index.store(index, Ordering::Relaxed);
+    pub fn focus_at(self, idx: usize) -> Self {
+        let idx = self.clamp_or_wrap(idx);
+        self.index.store(idx, Ordering::Relaxed);
         self
     }
 
