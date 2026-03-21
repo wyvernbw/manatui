@@ -155,6 +155,11 @@ impl<T: Copy> FocusGroup<T> {
     pub fn pipe<U>(self, value: (U, impl Into<FocusEvent>)) -> (U, Self) {
         (value.0, self.handle_event(value.1))
     }
+
+    #[must_use]
+    pub fn tag(&self) -> Option<T> {
+        self.tag.load()
+    }
 }
 
 impl<'a> FocusGroupItems<'a, ()> {
