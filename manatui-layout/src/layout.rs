@@ -750,16 +750,17 @@ impl ElementCtx {
         Ok(())
     }
     fn layout_postprocess(&mut self) {
-        for (props, scrollview, padding, scrollbars) in self.query_mut::<(
+        for (entity, children, props, scrollview, scrollbars) in &mut self.query::<(
+            Entity,
+            &Children,
             &mut Props,
             &mut ScrollView,
-            Option<&Padding>,
             Option<&ScrollbarVisibility>,
         )>() {
-            let inner_size = props.inner_size_from_padding(padding.unwrap_or(&Padding::ZERO));
+            let space_used = self.sum_space_used(children);
             *scrollview = ScrollView::new(ratatui::layout::Size {
-                width: inner_size.x,
-                height: inner_size.y,
+                width: space_used.x,
+                height: space_used.y,
             })
             .scrollbars_visibility(scrollbars.copied().unwrap_or_default());
         }

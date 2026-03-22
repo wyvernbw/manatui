@@ -109,6 +109,7 @@ pub fn pager_view(state: &Pager, content: View) -> View {
             <Block
                 ScrollView::default()
                 ScrollbarVisibility::Never
+                Width::grow() Height::grow()
                 {state.inner_state.clone()}
                 {state.focus.area_ref.clone()}
                 {state.focus.hit_test.clone()}

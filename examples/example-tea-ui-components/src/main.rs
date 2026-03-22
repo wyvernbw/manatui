@@ -144,7 +144,7 @@ async fn view(model: &Model) -> View {
                     />
                     <ListViewCompact .state={&model.list} .items={items.into_iter()}/>
                 </Block>
-                <Block>
+                <Block .rounded>
                     <PagerView .content={readme.into_view()} .state={&model.pager}
                         Width::fixed(54) Height::fixed(24)
                     />
