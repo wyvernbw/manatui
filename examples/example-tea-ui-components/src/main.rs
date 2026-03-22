@@ -5,6 +5,7 @@ use manatui::tea;
 use manatui::tea::Effect;
 use manatui::tea::focus::FocusGroup;
 use manatui::utils::keyv2;
+use manatui_tea_ui::components::button::{Button, ButtonView};
 use manatui_tea_ui::components::list::{List, ListViewCompact};
 use manatui_tea_ui::components::text_input::{TextInput, TextInputView};
 
@@ -25,6 +26,7 @@ async fn main() -> Result<()> {
 
 struct Model {
     focus: FocusGroup,
+    button: Button,
     text_input_1: TextInput,
     text_input_2: TextInput,
     list: List,
@@ -46,6 +48,7 @@ impl Model {
     async fn init() -> (Self, Effect<Msg>) {
         (
             Model {
+                button: Button::new(),
                 focus: FocusGroup::new(),
                 text_input_1: TextInput::new(),
                 text_input_2: TextInput::new(),
@@ -77,6 +80,7 @@ impl Model {
                     }
                 }
 
+                (self.button, _) = self.button.update(&event);
                 (self.text_input_1, self.focus) = self.focus.pipe(self.text_input_1.update(&event));
                 (self.text_input_2, self.focus) = self.focus.pipe(self.text_input_2.update(&event));
                 (self.list, self.focus) = self.focus.pipe(self.list.update(&event));
@@ -87,9 +91,10 @@ impl Model {
         }
     }
 
-    fn build_focus(mut self) -> Self {
+    fn build_focus(self) -> Self {
         self.focus
             .items()
+            .next_untagged(&self.button)
             .next_untagged(&self.text_input_1)
             .next_untagged(&self.text_input_2)
             .next_untagged(&self.list)
@@ -103,6 +108,9 @@ async fn view(model: &Model) -> View {
     ui! {
         <Block Width::grow() Height::grow() Center>
             <Block>
+                <ButtonView .state={&model.button}>
+                    "Click me!"
+                </ButtonView>
                 <TextInputView
                     .state={&model.text_input_1}
                     .placeholder="Jack Frost"

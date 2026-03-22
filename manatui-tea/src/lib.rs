@@ -501,6 +501,7 @@ where
         if enable_mouse {
             _ = crossterm::execute!(stdout(), crossterm::event::DisableMouseCapture);
         }
+        _ = crossterm::execute!(stdout(), crossterm::event::PopKeyboardEnhancementFlags);
     }
 
     Ok(())
