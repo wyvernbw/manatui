@@ -361,7 +361,16 @@ impl ElementCtx {
 
                 space_used.max(el.props.size)
             }
-            true => U16Vec2::ZERO,
+            true => {
+                el.children
+                    .iter()
+                    .try_for_each(|child| -> Result<(), ComponentError> {
+                        self.calculate_fit_sizes(view, child)?;
+                        Ok(())
+                    })?;
+
+                U16Vec2::ZERO
+            }
         };
 
         let size = u16vec2(
