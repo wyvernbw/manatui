@@ -3,26 +3,28 @@
 //! implements the layout algorithm.
 use std::{
     any::TypeId,
+    marker::PhantomData,
     ops::{Deref, DerefMut, Div},
-    sync::Arc,
+    sync::{Arc, RwLock},
 };
 
 use derive_more as d;
 use glam::{I16Vec2, U16Vec2, Vec2, i16vec2, u16vec2};
-use hecs::{CommandBuffer, Component, ComponentError, Entity, View, World};
+use hecs::{CommandBuffer, Component, ComponentError, Entity, Or, View, World};
 use manatui_utils::{Ecs, EcsMut};
 use ratatui::{
     buffer::Buffer,
     layout::{Direction, Margin, Rect},
     style::{Style, Styled},
-    widgets::{Clear, Padding, Widget},
+    widgets::{Clear, Padding, Paragraph, Widget},
 };
 use ratatui::{layout::Offset, widgets::StatefulWidget};
+use tui_scrollview::ScrollbarVisibility;
 pub use tui_scrollview::{ScrollView, ScrollViewState};
 
 /// trait for rendering elements through a shared reference. this is automatically implemented
 /// for anything that implements [`Widget`], [`Clone`] and [`Component`]
-pub trait ElWidget<M>: std::fmt::Debug + Component {
+pub trait ElWidget<M>: Component {
     /// the state type
     type State: ?Sized + Default + Component + Clone;
     /// render the element through the shared reference. clones internally
@@ -42,7 +44,7 @@ pub struct UnstyledWidgetMarker;
 
 impl<W: 'static> ElWidget<WidgetMarker> for W
 where
-    W: Widget + Styled<Item = W> + Clone + std::fmt::Debug + Component,
+    W: Widget + Styled<Item = W> + Clone + Component,
 {
     type State = ();
 
@@ -70,6 +72,83 @@ impl ElWidget<()> for Clear {
 
     fn get_style(&self) -> Style {
         Style::default()
+    }
+}
+
+trait SharedPtr<T: ?Sized>: Deref<Target = T> {}
+
+impl<T: ?Sized> SharedPtr<T> for Arc<T> {}
+
+///
+pub trait TextWidget: Widget {
+    ///
+    type Return<'a>;
+    ///
+    fn create<'a>(s: &'a str) -> Self::Return<'a>;
+}
+
+impl TextWidget for Paragraph<'_> {
+    type Return<'a> = Paragraph<'a>;
+    fn create<'a>(s: &'a str) -> Self::Return<'a> {
+        Paragraph::new(s)
+    }
+}
+
+/// # `SharedText`
+///
+/// Generic widget for rendering text with a backing shared pointer.
+///
+/// Ratatui text widgets (like [`Text`] or [`Paragraph`]) contain a borrow to their data so they cannot
+/// be sent to the ecs as a component. [`SharedText`] uses a generic pointer that implements [`SharedPtr`]
+/// ([`Arc`] for example) instead.
+///
+/// An easy way to think of [`SharedText`] is in terms of relation of borrow to shared pointer:
+/// - `&'a T` -> `Arc<T>`
+/// - `Text<'a>'` -> `SharedText<B, Text>` where `B` is the backing data (`Arc<str>` for example)
+#[derive(Debug, Default)]
+pub struct SharedText<S: SharedPtr<str>, T: TextWidget> {
+    _ty: PhantomData<T>,
+    ptr: S,
+    style: Style,
+}
+
+impl<S: SharedPtr<str>, T: TextWidget> SharedText<S, T> {
+    /// create a new shared text widget
+    pub fn new(value: S) -> SharedText<S, T> {
+        Self {
+            _ty: PhantomData,
+            ptr: value,
+            style: Style::default(),
+        }
+    }
+
+    /// get the underlying pointer of the shared text
+    pub fn ptr(&self) -> &S {
+        &self.ptr
+    }
+}
+
+impl<S, T> ElWidget<()> for SharedText<S, T>
+where
+    S: SharedPtr<str> + Component,
+    T: TextWidget + Component,
+    for<'a> T::Return<'a>: Styled,
+    for<'a> <T::Return<'a> as Styled>::Item: Widget,
+{
+    type State = ();
+
+    fn render_element(&self, area: Rect, buf: &mut Buffer, _: &mut Self::State) {
+        let s = self.ptr.deref();
+        let s = T::create(s).set_style(self.style);
+        s.render(area, buf);
+    }
+
+    fn set_style(&mut self, style: Style) {
+        self.style = style;
+    }
+
+    fn get_style(&self) -> Style {
+        self.style
     }
 }
 
@@ -655,14 +734,18 @@ impl ElementCtx {
         Ok(())
     }
     fn layout_postprocess(&mut self) {
-        for (props, scrollview, padding) in
-            self.query_mut::<(&mut Props, &mut ScrollView, Option<&Padding>)>()
-        {
+        for (props, scrollview, padding, scrollbars) in self.query_mut::<(
+            &mut Props,
+            &mut ScrollView,
+            Option<&Padding>,
+            Option<&ScrollbarVisibility>,
+        )>() {
             let inner_size = props.inner_size_from_padding(padding.unwrap_or(&Padding::ZERO));
             *scrollview = ScrollView::new(ratatui::layout::Size {
                 width: inner_size.x,
                 height: inner_size.y,
-            });
+            })
+            .scrollbars_visibility(scrollbars.copied().unwrap_or_default());
         }
     }
     /// renders the tree.
@@ -732,15 +815,20 @@ impl ElementCtx {
                 }
             };
             {
-                let mut scroll_state = self.get::<&mut ScrollViewState>(root);
                 let mut default_scroll_state = ScrollViewState::default();
-                scrollview.clone().render(
-                    area,
-                    buf,
-                    scroll_state
-                        .as_deref_mut()
-                        .unwrap_or(&mut default_scroll_state),
-                );
+                let scroll_state = self
+                    .query_one_mut::<Or<&mut ScrollViewState, &Arc<RwLock<ScrollViewState>>>>(root)
+                    .unwrap_or(Or::Left(&mut default_scroll_state));
+                match scroll_state {
+                    Or::Left(scroll_state) => {
+                        scrollview.clone().render(area, buf, scroll_state);
+                    }
+                    Or::Right(scroll_state) | Or::Both(_, scroll_state) => {
+                        scrollview
+                            .clone()
+                            .render(area, buf, &mut scroll_state.write().unwrap());
+                    }
+                }
             }
 
             _ = self.insert_one(root, scrollview);

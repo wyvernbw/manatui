@@ -17,6 +17,7 @@ glam.workspace = true
 strum = { version = "0.27.2", features = ["derive"] }
 tui-scrollview = "0.6.2"
 manatui-utils = { version = "0.1.0", path = "../manatui-utils" }
+crossbeam = "0.8.4"
 
 [dev-dependencies]
 manatui-macros.workspace = true 

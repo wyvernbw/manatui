@@ -1294,6 +1294,7 @@ version = "0.0.1"
 dependencies = [
  "bon",
  "color-eyre",
+ "crossbeam",
  "derive_more",
  "glam",
  "hecs",

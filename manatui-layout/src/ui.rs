@@ -22,7 +22,7 @@ use std::{
     any::TypeId,
     borrow::Cow,
     collections::VecDeque,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
 };
 
 use glam::U16Vec2;
@@ -38,7 +38,7 @@ use tracing::{Level, enabled, instrument};
 
 use crate::layout::{
     Center, Children, CrossJustify, ElWidget, Element, ElementCtx, Gap, Height, MainJustify,
-    ManaComponent, Position, Props, Size, TuiElMarker, Width,
+    ManaComponent, Position, Props, SharedText, Size, TuiElMarker, Width,
 };
 
 /// create a ui element.
@@ -144,7 +144,7 @@ where
         ) {
             let mut query = ctx
                 .world
-                .query_one::<(&W, Option<Or<&mut W::State, &Arc<Mutex<W::State>>>>)>(entity);
+                .query_one::<(&W, Option<Or<&mut W::State, &Arc<RwLock<W::State>>>>)>(entity);
             match query.get() {
                 Ok((widget, Some(state))) => {
                     match state {
@@ -152,7 +152,7 @@ where
                             widget.render_element(area, buf, state);
                         }
                         Or::Right(state) => {
-                            let mut state = state.lock().expect("failed to lock state");
+                            let mut state = state.write().expect("failed to lock state");
                             widget.render_element(area, buf, &mut state);
                         }
                     };
@@ -479,6 +479,8 @@ fn process_ui_system(world: &mut ElementCtx) {
         Paragraph(&'a Paragraph<'a>),
         Line(&'a Line<'a>),
         Span(&'a Span<'a>),
+
+        SharedParagraph(&'a SharedText<Arc<str>, Paragraph<'a>>),
     }
 
     {
@@ -489,35 +491,45 @@ fn process_ui_system(world: &mut ElementCtx) {
             Option<&Height>,
             Option<&Parent>,
         )>();
+
+        let resolve_paragraph_size = |p: &Paragraph<'_>,
+                                      width: Option<&Width>,
+                                      parent: Option<&Parent>,
+                                      world: &World|
+         -> Option<(usize, usize)> {
+            let width = width
+                .and_then(|w| match w.0 {
+                    Size::Fixed(value) => Some(value as usize),
+                    Size::Percentage(value) => {
+                        if let Some(Parent(parent)) = parent {
+                            let mut query = world.query_one::<(&Props, &Padding)>(*parent);
+                            let Ok((parent_props, parent_padding)) = query.get() else {
+                                return None;
+                            };
+                            let inner_size = parent_props.inner_size_from_padding(parent_padding);
+                            let width = inner_size.x * (value as u16) / 100;
+                            Some(width.into())
+                        } else {
+                            None
+                        }
+                    }
+                    Size::Fit => None,
+                    Size::Grow => None,
+                })
+                .unwrap_or_else(|| p.line_width());
+            Some((width, p.line_count(width as u16)))
+        };
+
         for (node, text_query, width, height, parent) in query.iter() {
             if enabled!(Level::TRACE) && (width.is_none() || height.is_none()) {
                 tracing::trace!(?node, "processing default size for text",);
             }
             let new_size = match text_query {
                 TextQuery::Text(text) => Some((text.width(), text.height())),
-                TextQuery::Paragraph(p) => {
-                    let width = width
-                        .and_then(|w| match w.0 {
-                            Size::Fixed(value) => Some(value as usize),
-                            Size::Percentage(value) => {
-                                if let Some(Parent(parent)) = parent {
-                                    let mut query = world.query_one::<(&Props, &Padding)>(*parent);
-                                    let Ok((parent_props, parent_padding)) = query.get() else {
-                                        return None;
-                                    };
-                                    let inner_size =
-                                        parent_props.inner_size_from_padding(parent_padding);
-                                    let width = inner_size.x * (value as u16) / 100;
-                                    Some(width.into())
-                                } else {
-                                    None
-                                }
-                            }
-                            Size::Fit => None,
-                            Size::Grow => None,
-                        })
-                        .unwrap_or_else(|| p.line_width());
-                    Some((width, p.line_count(width as u16)))
+                TextQuery::Paragraph(p) => resolve_paragraph_size(p, width, parent, world),
+                TextQuery::SharedParagraph(sp) => {
+                    let p = Paragraph::new(&**sp.ptr());
+                    resolve_paragraph_size(&p, width, parent, world)
                 }
                 TextQuery::Line(line) => Some((line.width(), 1)),
                 TextQuery::Span(span) => Some((span.width(), 1)),
