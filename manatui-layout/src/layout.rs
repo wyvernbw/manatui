@@ -267,7 +267,9 @@ impl ElementCtx {
                 self.calculate_fit_sizes(view, child)?;
 
                 let child = extract!(view, child)?;
-                space_used = space_used.increase(child.props.size, *el.direction);
+                if !child.position.is_absolute() {
+                    space_used = space_used.increase(child.props.size, *el.direction);
+                }
                 Ok(())
             })?;
 
@@ -668,7 +670,7 @@ impl ElementCtx {
     /// also see [`ratatui::prelude::Rect`], [`ratatui::prelude::Buffer`]
     pub fn render(&mut self, root: Element, area: Rect, buf: &mut Buffer) {
         // render self
-        self.render_impl(root, area, buf, Offset { x: 0, y: 0 });
+        self.render_impl(root, area, area, buf, Offset { x: 0, y: 0 });
         let ElementCtx {
             world,
             node_post_render_systems: _,
@@ -679,10 +681,22 @@ impl ElementCtx {
         }
     }
 
-    fn render_impl(&mut self, root: Element, area: Rect, buf: &mut Buffer, offset: Offset) {
-        let mut query = self.world.query_one::<(&mut Props, &Children)>(root);
-        let (props, children) = query.get().unwrap();
-        let area = props.split_area(area, offset);
+    fn render_impl(
+        &mut self,
+        root: Element,
+        area: Rect,
+        root_area: Rect,
+        buf: &mut Buffer,
+        offset: Offset,
+    ) {
+        let mut query = self
+            .world
+            .query_one::<(&mut Props, &Children, &Position)>(root);
+        let (props, children, position) = query.get().unwrap();
+        let area = match position {
+            Position::Auto => props.split_area(area, offset),
+            Position::Absolute(_, _) => props.split_area(root_area, offset),
+        };
 
         if self.get::<&Clear>(root).is_ok() {
             Clear.render(area, buf);
@@ -708,6 +722,7 @@ impl ElementCtx {
                     self.render_impl(
                         child,
                         scrollview.area(),
+                        root_area,
                         scrollview.buf_mut(),
                         Offset {
                             x: offset.x - i32::from(area.x),
@@ -733,7 +748,7 @@ impl ElementCtx {
         }
 
         for child in children.iter() {
-            self.render_impl(child, area, buf, offset);
+            self.render_impl(child, area, root_area, buf, offset);
         }
     }
 }
