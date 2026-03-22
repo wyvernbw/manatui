@@ -281,6 +281,7 @@ struct NodeQuery<'a> {
     cross_justify: &'a CrossJustify,
     max_width: Option<&'a MaxWidth>,
     max_height: Option<&'a MaxHeight>,
+    scrollview: Option<&'a ScrollView>,
     entity: Entity,
 }
 
@@ -340,22 +341,28 @@ impl ElementCtx {
             *max_height.as_fixed().unwrap_or(&u16::MAX),
         );
 
-        el.children
-            .iter()
-            .try_for_each(|child| -> Result<(), ComponentError> {
-                self.calculate_fit_sizes(view, child)?;
+        let space_used = match el.scrollview.is_some() {
+            false => {
+                el.children
+                    .iter()
+                    .try_for_each(|child| -> Result<(), ComponentError> {
+                        self.calculate_fit_sizes(view, child)?;
 
-                let child = extract!(view, child)?;
-                if !child.position.is_absolute() {
-                    space_used = space_used.increase(child.props.size, *el.direction);
-                }
-                Ok(())
-            })?;
+                        let child = extract!(view, child)?;
+                        if !child.position.is_absolute() {
+                            space_used = space_used.increase(child.props.size, *el.direction);
+                        }
+                        Ok(())
+                    })?;
 
-        space_used = space_used.pad(*el.padding, *el.direction);
-        space_used.main_axis += gap_space;
-        let space_used = space_used.to_u16vec2(*el.direction);
-        let space_used = space_used.max(el.props.size);
+                space_used = space_used.pad(*el.padding, *el.direction);
+                space_used.main_axis += gap_space;
+                let space_used = space_used.to_u16vec2(*el.direction);
+
+                space_used.max(el.props.size)
+            }
+            true => U16Vec2::ZERO,
+        };
 
         let size = u16vec2(
             *el.width.as_fixed().unwrap_or(&space_used.x),
