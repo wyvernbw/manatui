@@ -338,6 +338,10 @@ impl ElementCtx {
             .iter()
             .flat_map(|child| -> Result<_, ComponentError> {
                 let child = extract!(view, child)?;
+                Ok(child)
+            })
+            .filter(|child| !child.position.is_absolute())
+            .map(|child| {
                 let max_width = child.max_width.unwrap_or(&MaxWidth(Size::Fit));
                 let max_height = child.max_height.unwrap_or(&MaxHeight(Size::Fit));
                 let max_size = u16vec2(
@@ -377,12 +381,12 @@ impl ElementCtx {
                 }
                 let can_grow = main_axis_size.is_grow();
 
-                Ok(GrowEntry {
+                GrowEntry {
                     can_grow,
                     entity: child.entity,
                     size: *main_axis,
                     max_size: *max_size.main_axis(*el.direction),
-                })
+                }
             })
             .collect::<Vec<_>>();
 

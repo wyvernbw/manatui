@@ -244,6 +244,46 @@ fn test_grow_05() {
 }
 
 #[test]
+fn test_grow_06() {
+    let root = ui! {
+        <Block .rounded Width::grow() Height::grow() Direction::Horizontal>
+            <Block .rounded Width::grow() Height::grow()>
+                <Block .rounded Width::grow() Height::grow()/>
+                <Block .rounded Width::grow()/>
+            </Block>
+            <Block .rounded Width::grow() Height::grow()>
+                <Block .rounded Width::grow() Height::grow()/>
+            </Block>
+            <Block .rounded Width::grow() Height::grow()>
+                <Block .rounded Width::grow() Height::grow()/>
+            </Block>
+        </Block>
+    };
+    let area = Rect::new(0, 0, 20, 8);
+    let mut ctx = ElementCtx::new();
+    let mut buf = Buffer::empty(area);
+
+    let root = ctx.spawn_ui(root);
+
+    ctx.calculate_layout(root, area).unwrap();
+    ctx.render(root, area, &mut buf);
+
+    assert_eq!(
+        buf,
+        Buffer::with_lines([
+            "╭──────────────────╮",
+            "│╭────╮╭────╮╭────╮│",
+            "││╭──╮││╭──╮││╭──╮││",
+            "││╰──╯│││  ││││  │││",
+            "││╭──╮│││  ││││  │││",
+            "││╰──╯││╰──╯││╰──╯││",
+            "│╰────╯╰────╯╰────╯│",
+            "╰──────────────────╯",
+        ])
+    );
+}
+
+#[test]
 fn test_list_justify() {
     _ = color_eyre::install();
 
