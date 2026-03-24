@@ -1,7 +1,8 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use manatui::ratatui::crossterm::event::{self, Event};
 use manatui::ratatui::layout::Rect;
-use manatui::tea::focus::KeyMap;
+use manatui::tea::focus::{DEFAULT_KEYMAP, KeyMap};
 use manatui::tea::observe::HitEvent;
 use manatui::tea::{
     focus::Focus,
@@ -29,7 +30,7 @@ impl Focus for FocusItemState {
     }
 
     fn keymaps(&self) -> &'static [KeyMap] {
-        &[]
+        &[DEFAULT_KEYMAP]
     }
 
     fn hit_test(&self) -> HitEvent {
