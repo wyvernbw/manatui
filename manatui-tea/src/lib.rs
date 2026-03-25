@@ -89,6 +89,27 @@ impl<Msg: Clone + Send + Sync + 'static> Effect<Msg> {
             }
         }
     }
+
+    #[must_use]
+    pub fn chain<
+        Fut: Future<Output = ()> + Send + Sync + 'static,
+        F: FnOnce(Sender<Msg>) -> Fut + 'static + Send + Sync,
+    >(
+        self,
+        f: F,
+    ) -> Self {
+        Self::new(async move |tx| match self {
+            Effect::None => f(tx).await,
+            Effect::Msg(msg) => {
+                _ = tx.send_async(msg).await;
+                f(tx).await;
+            }
+            Effect::Callback(a) => {
+                tokio::spawn(a.run_effect(tx.clone()));
+                tokio::spawn(f(tx));
+            }
+        })
+    }
 }
 
 enum RuntimeMsg<Msg> {
@@ -360,7 +381,7 @@ where
     }
 
     let is_inline = matches!(options.viewport, ratatui::Viewport::Inline(_));
-    let dispatch = flume::unbounded::<Msg>();
+    let dispatch = flume::bounded::<Msg>(1024);
     let mut backend = DefaultBackend::new(writer);
     let msg_stream = MsgStream {
         event_stream: backend.create_events().await,
