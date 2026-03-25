@@ -1,4 +1,7 @@
-use std::time::Duration;
+use std::{
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 pub use tachyonfx::fx::*;
 
 use manatui_layout::layout::NodePostRenderSchedule;
@@ -16,11 +19,11 @@ impl<B: Backend> Ctx<B> {
                     return;
                 };
                 if let Some(fx) = fx {
-                    fx.0.process(Duration::default(), buf, area);
+                    fx.write().unwrap().process(Duration::default(), buf, area);
                 }
                 if let Some(fx_list) = fx_list {
                     for fx in &mut fx_list.0 {
-                        fx.0.process(Duration::default(), buf, area);
+                        fx.write().unwrap().process(Duration::default(), buf, area);
                     }
                 }
             });
@@ -37,12 +40,12 @@ impl<B: Backend> Ctx<B> {
     }
 }
 
-#[derive(Debug, derive_more::Deref, derive_more::DerefMut, derive_more::From, Clone)]
-pub struct Fx(tachyonfx::Effect);
+#[derive(derive_more::Deref, derive_more::DerefMut, derive_more::From, Clone)]
+pub struct Fx(Arc<RwLock<tachyonfx::Effect>>);
 
 impl Default for Fx {
     fn default() -> Self {
-        Self(tachyonfx::fx::sequence(&[]))
+        Self(Arc::new(RwLock::new(tachyonfx::fx::sequence(&[]))))
     }
 }
 
@@ -50,11 +53,11 @@ impl Fx {
     /// construct a new shader effect value that can be used as a component.
     #[must_use]
     pub fn new(effect: tachyonfx::Effect) -> Self {
-        Fx(effect)
+        Fx(Arc::new(RwLock::new(effect)))
     }
 
     pub fn advance(&mut self, dt: Duration) {
-        if let Some(timer) = self.timer_mut() {
+        if let Some(timer) = self.write().unwrap().timer_mut() {
             timer.process(dt);
         }
     }
